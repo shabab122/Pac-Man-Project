@@ -1,0 +1,14 @@
+{
+  "id": "neon_nexus",
+  "name": "Neon Nexus",
+  "width": 27,
+  "height": 21,
+  "seed": 41073,
+  "loop_chance": 0.2,
+  "food_count": 22,
+  "power_food_count": 3,
+  "ghost_count": 3,
+  "terrain_count": 20,
+  "accent": [45, 224, 255]
+}
+

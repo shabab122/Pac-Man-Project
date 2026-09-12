@@ -1,0 +1,14 @@
+{
+  "id": "quantum_vault",
+  "name": "Quantum Vault",
+  "width": 29,
+  "height": 21,
+  "seed": 112410,
+  "loop_chance": 0.24,
+  "food_count": 26,
+  "power_food_count": 4,
+  "ghost_count": 4,
+  "terrain_count": 24,
+  "accent": [176, 98, 255]
+}
+

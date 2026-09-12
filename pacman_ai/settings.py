@@ -1,0 +1,38 @@
+"""Visual and gameplay constants."""
+
+from __future__ import annotations
+
+WINDOW_WIDTH = 1440
+WINDOW_HEIGHT = 900
+FPS = 60
+
+BACKGROUND_TOP = (5, 8, 25)
+BACKGROUND_BOTTOM = (9, 14, 42)
+PANEL = (12, 20, 48)
+PANEL_LIGHT = (18, 31, 68)
+TEXT = (235, 244, 255)
+MUTED = (145, 164, 195)
+CYAN = (45, 224, 255)
+BLUE = (56, 105, 255)
+PURPLE = (154, 83, 255)
+PINK = (255, 76, 185)
+YELLOW = (255, 211, 47)
+ORANGE = (255, 139, 48)
+GREEN = (71, 235, 152)
+RED = (255, 82, 105)
+WALL_FILL = (15, 28, 75)
+WALL_EDGE = (55, 116, 255)
+
+PLAYER_STEP_SECONDS = 0.16
+GHOST_STEP_SECONDS = 0.52
+POWER_SECONDS = 7.0
+STARTING_LIVES = 3
+
+ALGORITHM_COLORS = {
+    "BFS": (46, 213, 255),
+    "DFS": (176, 98, 255),
+    "UCS": (65, 229, 154),
+    "Dijkstra": (255, 161, 65),
+    "A*": (255, 87, 181),
+}
+

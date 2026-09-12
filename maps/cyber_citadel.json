@@ -1,0 +1,14 @@
+{
+  "id": "cyber_citadel",
+  "name": "Cyber Citadel",
+  "width": 25,
+  "height": 23,
+  "seed": 730318,
+  "loop_chance": 0.17,
+  "food_count": 24,
+  "power_food_count": 3,
+  "ghost_count": 3,
+  "terrain_count": 18,
+  "accent": [255, 87, 181]
+}
+
