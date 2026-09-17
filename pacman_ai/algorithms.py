@@ -10,11 +10,11 @@ from collections import deque
 from dataclasses import dataclass
 import heapq
 import itertools
-from math import inf
+from math import hypot, inf
 from time import perf_counter
 from typing import Callable, Iterable
 
-from .models import Algorithm, Position, SearchResult
+from .models import Algorithm, HeuristicMode, Position, SearchResult
 
 NeighborFunction = Callable[[Position], Iterable[Position]]
 CostFunction = Callable[[Position, Position], float]
@@ -33,6 +33,27 @@ def manhattan(a: Position, b: Position) -> float:
     """Return Manhattan distance for four-directional grid movement."""
 
     return float(abs(a[0] - b[0]) + abs(a[1] - b[1]))
+
+
+def euclidean(a: Position, b: Position) -> float:
+    """Return straight-line distance between two grid cells."""
+
+    return hypot(a[0] - b[0], a[1] - b[1])
+
+
+def heuristic_for_mode(mode: HeuristicMode) -> tuple[HeuristicFunction, float]:
+    """Return the heuristic function and multiplier for an A* mode.
+
+    Manhattan and Euclidean remain admissible because every legal step costs at
+    least one. Weighted A* deliberately multiplies Manhattan distance by 1.65;
+    it often explores fewer cells, but it may return a non-optimal route.
+    """
+
+    if mode is HeuristicMode.EUCLIDEAN:
+        return euclidean, 1.0
+    if mode is HeuristicMode.WEIGHTED:
+        return manhattan, 1.65
+    return manhattan, 1.0
 
 
 def _reconstruct(
@@ -61,6 +82,7 @@ def _finish(
     explored: list[Position],
     frontier_peak: int,
     cost_fn: CostFunction,
+    heuristic_mode: HeuristicMode | None = None,
 ) -> SearchResult:
     path = _reconstruct(parents, goal)
     return SearchResult(
@@ -71,6 +93,7 @@ def _finish(
         path_cost=_path_cost(path, cost_fn),
         elapsed_ms=(perf_counter() - started) * 1000.0,
         frontier_peak=frontier_peak,
+        heuristic_mode=heuristic_mode,
     )
 
 
@@ -234,16 +257,26 @@ def dijkstra_search(problem: SearchProblem) -> SearchResult:
 
 
 def a_star_search(
-    problem: SearchProblem, heuristic: HeuristicFunction = manhattan
+    problem: SearchProblem,
+    heuristic: HeuristicFunction = manhattan,
+    heuristic_weight: float = 1.0,
+    heuristic_mode: HeuristicMode = HeuristicMode.MANHATTAN,
 ) -> SearchResult:
-    """Find a lowest-cost path using g(n) + an admissible grid heuristic."""
+    """Find a route using ``f(n) = g(n) + weight × h(n)``."""
+
+    if heuristic_weight <= 0:
+        raise ValueError("heuristic_weight must be positive")
 
     started = perf_counter()
     counter = itertools.count()
     g_score: dict[Position, float] = {problem.start: 0.0}
     parents: dict[Position, Position | None] = {problem.start: None}
     frontier: list[tuple[float, int, Position]] = [
-        (heuristic(problem.start, problem.goal), next(counter), problem.start)
+        (
+            heuristic_weight * heuristic(problem.start, problem.goal),
+            next(counter),
+            problem.start,
+        )
     ]
     closed: set[Position] = set()
     explored: list[Position] = []
@@ -264,7 +297,7 @@ def a_star_search(
                 continue
             g_score[neighbor] = candidate
             parents[neighbor] = node
-            priority = candidate + heuristic(neighbor, problem.goal)
+            priority = candidate + heuristic_weight * heuristic(neighbor, problem.goal)
             heapq.heappush(frontier, (priority, next(counter), neighbor))
         frontier_peak = max(frontier_peak, len(frontier))
 
@@ -276,6 +309,7 @@ def a_star_search(
         explored,
         frontier_peak,
         problem.step_cost,
+        heuristic_mode,
     )
 
 
@@ -288,9 +322,17 @@ SEARCH_FUNCTIONS = {
 }
 
 
-def run_search(algorithm: Algorithm, problem: SearchProblem) -> SearchResult:
+def run_search(
+    algorithm: Algorithm,
+    problem: SearchProblem,
+    *,
+    heuristic_mode: HeuristicMode = HeuristicMode.MANHATTAN,
+) -> SearchResult:
     """Run one of the supported algorithms."""
 
+    if algorithm is Algorithm.A_STAR:
+        heuristic, weight = heuristic_for_mode(heuristic_mode)
+        return a_star_search(problem, heuristic, weight, heuristic_mode)
     try:
         search_function = SEARCH_FUNCTIONS[algorithm]
     except KeyError as exc:
@@ -298,8 +340,23 @@ def run_search(algorithm: Algorithm, problem: SearchProblem) -> SearchResult:
     return search_function(problem)
 
 
-def compare_searches(problem: SearchProblem) -> list[SearchResult]:
+def compare_searches(
+    problem: SearchProblem,
+    *,
+    heuristic_mode: HeuristicMode = HeuristicMode.MANHATTAN,
+) -> list[SearchResult]:
     """Run every algorithm against the exact same problem instance."""
 
-    return [run_search(algorithm, problem) for algorithm in Algorithm]
+    return [
+        run_search(algorithm, problem, heuristic_mode=heuristic_mode)
+        for algorithm in Algorithm
+    ]
 
+
+def compare_a_star_heuristics(problem: SearchProblem) -> list[SearchResult]:
+    """Run A* once with every supported heuristic mode."""
+
+    return [
+        run_search(Algorithm.A_STAR, problem, heuristic_mode=mode)
+        for mode in HeuristicMode
+    ]

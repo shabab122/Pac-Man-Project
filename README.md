@@ -1,202 +1,256 @@
-# Optimized Pac-Man AI Pathfinding Lab
+# Adaptive Pac-Man AI Pathfinding Laboratory
 
-An interactive AI Lab project where Pac-Man automatically collects every data
-pellet, avoids moving ghosts, and reaches an exit by using one of five classical
-search algorithms: **BFS, DFS, UCS, Dijkstra, or A\***.
+An established Python/Pygame AI game where Pac-Man automatically collects
+pellets, avoids intelligent ghosts, and reaches an exit using **BFS, DFS, UCS,
+Dijkstra, or A\***. The upgraded edition preserves the original five search
+implementations and gameplay while adding an explainable AI workbench, custom
+map editor, experiments, replays, and CSV/PDF evidence export.
 
-![Gameplay preview](screenshots/gameplay.png)
+![Upgraded gameplay](screenshots/upgraded_gameplay.png)
 
-The interface visualizes explored cells, the chosen path, weighted danger zones,
-and live performance measurements. A built-in comparison screen runs all five
-algorithms from the same start cell to the same target for a fair demonstration.
+## What is included
 
-## Main features
+### Original project features preserved
 
-- Five independent, selectable search implementations
-- Animated search exploration and route visualization
+- Five independent search implementations: BFS, DFS, UCS, Dijkstra, and A*
 - Three deterministic, replayable neon mazes
-- Moving ghosts that chase Pac-Man with BFS
-- Risk-aware weighted paths around ghosts
-- Normal pellets, power pellets, score, lives, and locked exit
-- Automatic target selection and dynamic replanning
-- Weighted terrain with movement costs of 1, 2, or 3
-- Side-by-side algorithm comparison table
-- Path steps, total cost, expanded nodes, frontier peak, and runtime metrics
-- Run, pause, single-step, reset, map switch, speed, and ghost controls
-- Procedural graphics and optional sound, with no external asset downloads
-- Unit tests for algorithms, maps, and gameplay logic
+- Weighted terrain and distance-based ghost-danger costs
+- Pellets, power pellets, score, lives, moving ghosts, and a locked exit
+- Automatic target selection and route replanning
+- Live explored-cell and selected-route visualization
+- Algorithm comparison from one fair, unchanged snapshot
+- Run, pause, single-step, reset, map, speed, and ghost controls
+- Procedural graphics and sound with no downloaded game assets
+
+### Upgraded features
+
+- **Explainable AUTO selector:** chooses one of the original five algorithms
+  using visible deterministic rules; AUTO is a controller, not a sixth search.
+- **A* heuristic laboratory:** Manhattan, Euclidean, and Weighted A* modes with
+  a fair side-by-side comparison.
+- **Advanced ghost team:** Aggressive, Predictive, Random, and Defensive
+  policies. Classic BFS chasing remains available as a compatibility mode.
+- **Risk heatmap:** displays the same danger penalties used by weighted search.
+- **Map Studio:** edits walls, floor, start, exit, pellets, power pellets,
+  ghosts, and terrain costs. Saving creates a new validated JSON file and never
+  overwrites a packaged map.
+- **Reproducible Experiment Mode:** benchmarks all algorithms across five fixed
+  targets with three timing samples per algorithm.
+- **Explainable AI panel:** identifies the data structure, expansion rule,
+  correctness guarantee, route rationale, and observed metrics.
+- **Mission Replay:** records up to 2,500 bounded frames, provides playback, and
+  saves a portable JSON timeline.
+- **Evidence export:** produces raw CSV results, a presentation-ready PDF
+  summary, and a JSON replay in `exports/`.
+- **Two-tab control panel:** separates normal play controls from research tools
+  so the game stays readable during a live demo.
 
 ## Requirements
 
 - Python 3.10 or newer
 - Windows, macOS, or Linux
-- Approximately 50 MB of free disk space after dependency installation
+- About 70 MB of free space after installing dependencies
 
-No database, API key, internet connection, or external game asset is required
-after installation.
+No database, API key, account, or network service is required after setup.
 
-## Setup and run
+## Ubuntu/Linux setup
 
-### Windows PowerShell
+Open a terminal inside the extracted project folder and run one command at a
+time:
 
-Open PowerShell inside the extracted project folder, then run:
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python main.py
+```
+
+For later runs:
+
+```bash
+cd /path/to/adaptive_pacman_ai
+source .venv/bin/activate
+./run_linux.sh
+```
+
+## Windows PowerShell setup
 
 ```powershell
 py -m venv .venv
 .venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python main.py
 ```
 
-If PowerShell blocks activation, allow it only for the current terminal session:
+If PowerShell blocks activation, allow it only in the current terminal:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.venv\Scripts\Activate.ps1
 ```
 
-Then activate the environment again. You can use `run_windows.bat` on later runs.
-
-### macOS or Linux
-
-Open a terminal inside the extracted project folder, then run:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python main.py
-```
-
-You can use `./run_linux.sh` on later runs.
+Use `run_windows.bat` after the first setup.
 
 ## Controls
 
 | Action | Keyboard | Interface |
 |---|---:|---|
-| Select BFS, DFS, UCS, Dijkstra, A* | `1` to `5` | Algorithm buttons |
-| Start or stop the AI | `Enter` | Run AI / Stop AI |
-| Pause or resume | `Space` | Keyboard only |
-| Move one planned cell | `S` | Step Once |
-| Compare every algorithm | `C` | Compare |
-| Reset the current map | `R` | Reset |
-| Load the next map | `M` | Next Map |
-| Freeze or activate ghosts | `G` | Ghosts button |
-| Open help | `H` | `?` button |
-| Close a dialog | `Esc` | Close button |
+| Select BFS, DFS, UCS, Dijkstra, A* | `1`–`5` | Play Control tab |
+| Start or stop AI | `Enter` | Run AI / Stop AI |
+| Pause or resume | `Space` | Keyboard |
+| Advance one player cell | `S` | Step Once |
+| Compare five algorithms | `C` | Compare |
+| Reset mission | `R` | Reset |
+| Next map | `M` | Next Map |
+| Freeze/activate ghosts | `G` | Ghosts button |
+| Switch control-panel tab | `L` | Play Control / AI Workbench |
+| Toggle AUTO selector | `A` | AI Workbench |
+| Explain current route | `E` | Explain Route |
+| Run experiment | `X` | Experiment |
+| Compare A* heuristics | `J` | Heuristics |
+| Open replay | `V` | Replay |
+| Open Map Studio | `F` | Map Studio |
+| Export CSV/PDF/replay | `B` | Export CSV/PDF |
+| Help | `H` | `?` |
 
-Use the **Ghosts: Frozen** setting during a classroom explanation if you want a
-repeatable algorithm comparison without a moving environment.
+Replay controls use `Left`, `Right`, and `Space`. Map Studio uses `1`–`9` for
+brushes, `V` to validate, `S` to save and play, and `Esc` to return safely.
 
-## What the colors mean
+## Search and cost model
 
-| Visual | Meaning |
-|---|---|
-| Bright route line | Current path selected by the active algorithm |
-| Transparent colored cells | Nodes expanded during search |
-| Purple or pink floor tile | Weighted terrain with a higher movement cost |
-| Red/orange ghost aura | Dynamic danger cost used by UCS, Dijkstra, and A* |
-| Pink-white large pellet | Power pellet that makes ghosts vulnerable |
-| Red exit | Locked while pellets remain |
-| Green exit | Unlocked after every pellet is collected |
+Every walkable grid cell is a graph node. Legal four-direction moves are edges.
+The base terrain cost is 1, 2, or 3. When ghosts are active and not frightened,
+the destination receives this additional soft danger penalty:
 
-## Algorithm summary
+| Nearest ghost distance | Added cost |
+|---:|---:|
+| 0 cells | 40 |
+| 1 cell | 12 |
+| 2 cells | 5 |
+| 3 cells | 2 |
+| 4+ cells | 0 |
 
-| Algorithm | Main data structure | Weighted | Optimal in this project | Best demonstration point |
-|---|---|---:|---:|---|
-| BFS | Queue | No | Fewest steps only | Simple unweighted shortest path |
-| DFS | Stack | No | No | Deep exploration can choose a long route |
-| UCS | Priority queue | Yes | Yes | Chooses the lowest accumulated cost |
-| Dijkstra | Priority queue | Yes | Yes | Shortest paths with non-negative weights |
-| A* | Priority queue + heuristic | Yes | Yes | Usually expands fewer cells toward one goal |
+BFS and DFS ignore weights while choosing their path but still report the real
+cost afterward. UCS, Dijkstra, and A* use terrain plus danger costs during
+planning.
 
-**Important viva point:** UCS and Dijkstra use the same priority rule in this
-single-source, single-target, non-negative weighted grid. Their results therefore
-normally match. They remain separate implementations so the class can compare
-their terminology and code structure.
+## A* heuristic modes
 
-The full explanation is in [docs/ALGORITHMS.md](docs/ALGORITHMS.md).
+| Mode | Formula/idea | Optimality in this grid |
+|---|---|---|
+| Manhattan | `|x₁-x₂| + |y₁-y₂|` | Guaranteed |
+| Euclidean | Straight-line distance | Guaranteed, usually less informed |
+| Weighted A* | `g(n) + 1.65 × Manhattan` | Not guaranteed; often fewer expansions |
 
-## Fair comparison rule
+The default remains Manhattan A*, preserving the original behavior and
+weighted optimality tests.
 
-The Compare button takes one snapshot containing:
+## Fair experiment rule
 
-- the same Pac-Man position;
-- the same target pellet or exit;
-- the same maze and terrain costs;
-- the same ghost positions and danger costs.
+The workbench selects deterministic near-to-far targets from the current map.
+For each target, every algorithm receives the same:
 
-It runs all five algorithms against that unchanged problem. Runtime is measured
-with Python's high-resolution timer, so tiny values can vary between computers.
-Path length, path cost, and expanded-node counts remain the more useful demo
-measurements.
+- start and goal;
+- walls and terrain costs;
+- ghost positions and danger penalties;
+- frightened/power state.
+
+The report records success, steps, weighted cost, expanded nodes, frontier peak,
+and planning time. Time depends on hardware, so path cost, steps, and expansion
+counts are the stronger reproducible measures.
 
 ## Project structure
 
 ```text
-optimized_pacman_ai/
-├── main.py                     Application entry point
+adaptive_pacman_ai/
+├── main.py
 ├── pacman_ai/
-│   ├── algorithms.py           BFS, DFS, UCS, Dijkstra, and A*
-│   ├── maze.py                 Map validation and maze generation
-│   ├── planner.py              Target choice and ghost-risk cost model
-│   ├── session.py              Game rules and AI simulation state
-│   ├── ui.py                   Pygame rendering and controls
-│   ├── audio.py                Optional procedural sound effects
-│   ├── models.py               Shared enums and data classes
-│   └── settings.py             Colors and gameplay constants
-├── maps/                       Three deterministic JSON map definitions
-├── tests/                      Automated unit and integration tests
-├── docs/                       Report, algorithm guide, architecture, demo guide
-├── screenshots/                Verified gameplay preview
-├── original_proposal/          Original Group 7 proposal deck
-├── requirements.txt            Runtime dependency
-├── requirements-dev.txt        Optional test dependency
-├── run_tests.py                Standard-library test runner
-├── run_windows.bat             Convenient Windows launcher
-└── run_linux.sh                Convenient macOS/Linux launcher
+│   ├── algorithms.py       BFS, DFS, UCS, Dijkstra, A*, heuristic variants
+│   ├── planner.py          Costs, target choice, AUTO rules, comparisons
+│   ├── session.py          Gameplay, ghost policies, experiments, exports
+│   ├── maze.py             Generated/explicit map loading and validation
+│   ├── editor.py           Safe Map Studio model
+│   ├── experiments.py      Benchmarks and CSV/PDF reports
+│   ├── replay.py           Bounded replay recording and JSON export
+│   ├── explain.py          Human-readable algorithm explanations
+│   ├── ui.py               Neon interface, workbench, editor, and modals
+│   ├── app.py              Input, scene, update, rendering controller
+│   ├── audio.py            Optional procedural sounds
+│   ├── models.py           Shared enums and data classes
+│   └── settings.py         Visual and gameplay constants
+├── maps/                   Three packaged maps; custom maps save under custom/
+├── tests/                  Original regression tests plus upgrade tests
+├── docs/                   Report, architecture, algorithms, demo, viva notes
+├── screenshots/            Verified upgraded interface gallery
+├── presentation/           Neutral editable project presentation
+├── sample_outputs/         Verified sample CSV/PDF/replay evidence
+├── exports/                Runtime exports created by the game
+├── requirements.txt
+├── run_tests.py
+├── run_linux.sh
+└── run_windows.bat
 ```
 
-## Run the tests
+## Verification
 
-The built-in runner does not require pytest:
+Run the complete standard-library suite:
 
 ```bash
 python run_tests.py
 ```
 
-For pytest output:
+Optional pytest output:
 
 ```bash
 python -m pip install -r requirements-dev.txt
 pytest
 ```
 
-The suite checks valid paths, weighted optimality, unreachable goals,
-deterministic connected maps, comparison coverage, reset behavior, and a complete
-static A* mission.
+Headless rendering check:
 
-## Documentation for presentation and viva
+```bash
+python main.py --smoke-test
+```
 
-- [Project proposal and report](docs/PROJECT_REPORT.md)
-- [Algorithm guide](docs/ALGORITHMS.md)
-- [Architecture and data flow](docs/ARCHITECTURE.md)
-- [Three-week team roadmap](docs/TEAM_ROADMAP.md)
-- [Five-minute demo and viva guide](docs/DEMO_GUIDE.md)
-- [Verified test and mission results](docs/VERIFICATION_RESULTS.md)
+Render the complete visual QA gallery:
+
+```bash
+python main.py --qa-gallery qa_gallery
+```
+
+Verified deliverables are included in:
+
+- `presentation/Adaptive_Pacman_AI_Upgraded_Presentation_Final.pptx`
+- `sample_outputs/algorithm_experiment_sample.csv`
+- `sample_outputs/algorithm_experiment_sample.pdf`
+- `sample_outputs/mission_replay_sample.json`
+- `screenshots/upgraded_interface_gallery.png`
+
+The final verification result is **19/19 automated tests passed**, plus a
+successful headless startup/render check. See `docs/VERIFICATION_RESULTS.md`
+for the reproducible experiment tables and artifact checks.
+
+## Important viva points
+
+- UCS and Dijkstra normally match in this single-source, single-target,
+  non-negative weighted grid, but they remain independent implementations.
+- AUTO does not invent a new algorithm; it chooses among the required five and
+  gives a rule-based reason.
+- Weighted A* can be faster but sacrifices the optimality guarantee.
+- The risk heatmap visualizes the same cost function used by weighted search.
+- Map Studio saves explicit maps separately, validates connectivity, and keeps
+  the packaged maps unchanged.
+- Experiment claims apply to controlled packaged-map scenarios, not every
+  possible map or computer.
 
 ## Known limitations
 
-- Runtime measurements for such small maps are often below one millisecond and
-  depend on hardware and background processes.
-- BFS and DFS intentionally ignore weighted danger while selecting a path. They
-  still report the real cost of the chosen path for comparison.
-- A moving ghost can invalidate a route after planning. The controller checks
-  the next cell and replans instead of pretending the environment is static.
-- This is an educational simulation, not a reinforcement-learning system. The
-  AI behavior comes from deterministic graph search and a transparent cost model.
-
-## Academic integrity
-
-Every team member should be able to explain their assigned module, the shared
-search problem, the cost function, and one test. Do not present a metric or an
-algorithm as understood unless the team can reproduce its behavior in the demo.
+- Small-map timings are often below one millisecond and vary by hardware.
+- The project uses transparent classical search, not reinforcement learning.
+- Replay stores logical frames rather than video, keeping files small and
+  inspectable.
+- Custom maps are local JSON files; there is no cloud sharing or database.

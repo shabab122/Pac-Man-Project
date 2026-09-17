@@ -153,13 +153,13 @@ f(n) = g(n) + h(n)
 ```
 
 - `g(n)` is the exact accumulated cost from the start to node `n`.
-- `h(n)` is Manhattan distance from `n` to the goal.
+- `h(n)` is the selected estimate from `n` to the goal.
 - `f(n)` is the priority used by the frontier.
 
 ### Pseudocode
 
 ```text
-frontier = priority_queue((h(start), start))
+frontier = priority_queue((weight * h(start), start))
 g_score[start] = 0
 
 while frontier is not empty:
@@ -170,7 +170,7 @@ while frontier is not empty:
         candidate_g = g_score[node] + step_cost(node, neighbor)
         if candidate_g is lower than the recorded score:
             update g score and parent
-            priority = candidate_g + h(neighbor)
+            priority = candidate_g + weight * h(neighbor)
             add neighbor to frontier
 ```
 
@@ -181,16 +181,44 @@ Pac-Man can move only horizontally or vertically. Ignoring walls, at least
 estimate never exceeds the true remaining cost. The heuristic is admissible and
 consistent for this cost model.
 
+### Heuristic modes
+
+| Mode | Definition | Effect | Optimality guarantee |
+|---|---|---|---|
+| Manhattan | `abs(dx) + abs(dy)` | Strong grid-aware guidance | Yes |
+| Euclidean | `sqrt(dx² + dy²)` | Valid but weaker for four-direction movement | Yes |
+| Weighted A* | `1.65 × Manhattan` | More aggressive goal direction | No |
+
+Weighted A* is included as an experiment, not presented as universally better.
+It may expand fewer nodes, but it can choose a higher-cost route.
+
 ### Properties
 
 - Complete: yes on this finite graph
-- Optimal by weighted cost: yes with the current heuristic
+- Optimal by weighted cost: yes with Manhattan or Euclidean; not guaranteed with
+  Weighted A*
 - Worst-case complexity: comparable to Dijkstra when the heuristic gives little
   guidance; it often expands fewer nodes for one specific grid target
 - Space complexity: `O(V)`
 
 Analogy: choosing a route using both the fuel already spent and a realistic
 estimate of fuel still needed.
+
+## Explainable AUTO controller
+
+AUTO is not another search algorithm. It inspects the current problem and picks
+one of the five required algorithms with deterministic rules:
+
+```text
+if active ghost danger:              choose A*
+else if weighted and target is near: choose UCS
+else if weighted:                    choose Dijkstra
+else if target is near:              choose BFS
+else:                                choose A*
+```
+
+DFS is intentionally never selected automatically because it provides no
+shortest-path or lowest-cost guarantee. It remains available for manual study.
 
 ## Common mistakes
 
@@ -199,7 +227,8 @@ estimate of fuel still needed.
 - Using a negative step cost with UCS or Dijkstra.
 - Marking a node visited too early in a weighted search without allowing a better
   cost to replace it.
-- Using Euclidean straight-line distance without explaining the movement model.
+- Claiming Weighted A* always returns the optimal route.
+- Calling AUTO a sixth search algorithm.
 - Comparing algorithms with different starts, targets, or ghost positions.
 - Claiming UCS and Dijkstra are meaningfully different in this exact setup.
 - Treating runtime below one millisecond as stable across computers.
@@ -217,4 +246,3 @@ Predict:
 
 The automated test `test_bfs_minimizes_steps_but_not_weighted_cost` implements
 this exact scenario.
-

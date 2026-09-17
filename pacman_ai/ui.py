@@ -9,7 +9,11 @@ from typing import Iterable
 
 import pygame
 
-from .models import Algorithm, Position, SearchResult
+from .editor import EditorTool, MapEditor
+from .explain import explain_result
+from .models import Algorithm, HeuristicMode, Position, SearchResult
+from .planner import danger_penalty
+from .replay import ReplayFrame
 from .session import GameSession
 from .settings import (
     ALGORITHM_COLORS,
@@ -56,8 +60,10 @@ class UIRenderer:
         ]
         self.explored_reveal = 0.0
         self._result_identity: int | None = None
+        self.side_tab = "play"
         self.maze_rect = pygame.Rect(30, 118, 868, 714)
         self.side_rect = pygame.Rect(920, 118, 490, 714)
+        self.editor_grid_rect = pygame.Rect(40, 130, 1000, 700)
 
     def font(self, size: int, bold: bool = False) -> pygame.font.Font:
         key = (size, bold)
@@ -220,12 +226,12 @@ class UIRenderer:
     def draw_menu(self, now: float) -> None:
         self.buttons.clear()
         self._background_details(now)
-        self._text("ARTIFICIAL INTELLIGENCE LAB", (72, 55), 18, CYAN, True)
-        self._text("OPTIMIZED", (72, 118), 48, TEXT, True)
+        self._text("CLASSICAL AI  /  INTERACTIVE PATHFINDING LAB", (72, 55), 18, CYAN, True)
+        self._text("ADAPTIVE", (72, 118), 48, TEXT, True)
         self._text("PAC-MAN", (72, 170), 90, YELLOW, True)
         self._text("PATHFINDING LAB", (76, 268), 42, CYAN, True)
         self._wrapped_text(
-            "Watch five classical AI search algorithms navigate a living maze, collect every data pellet, avoid moving ghosts, and reach the exit.",
+            "Build a maze, compare five classical search algorithms, inspect every decision, and export reproducible experiment evidence.",
             pygame.Rect(78, 335, 585, 110),
             22,
             (186, 204, 232),
@@ -236,8 +242,8 @@ class UIRenderer:
         self._panel(feature_rect, PURPLE, 210)
         features = [
             ("01", "Five algorithms", "BFS, DFS, UCS, Dijkstra, and A*"),
-            ("02", "Live search telemetry", "Path, expanded nodes, cost, frontier, and time"),
-            ("03", "Dynamic simulation", "Moving ghosts, risk costs, power mode, and replanning"),
+            ("02", "Adaptive intelligence", "Auto-selection, A* heuristics, and four ghost policies"),
+            ("03", "Research workbench", "Experiments, explanations, replay, CSV, and PDF reports"),
         ]
         y = feature_rect.top + 28
         for number, title, body in features:
@@ -255,8 +261,8 @@ class UIRenderer:
         for index in range(6):
             self._glow_circle((1038 + index * 42, 390), 7, YELLOW)
         self._draw_ghost((1250, 392), 76, (255, 82, 105), False, now)
-        self._text("AI ROUTE ENGINE", (1050, 192), 18, PINK, True, "center")
-        self._text("SEARCH  /  PLAN  /  ADAPT", (1050, 603), 16, MUTED, True, "center")
+        self._text("ADAPTIVE ROUTE ENGINE", (1050, 192), 18, PINK, True, "center")
+        self._text("DESIGN  /  SEARCH  /  EXPLAIN", (1050, 603), 16, MUTED, True, "center")
 
         start_rect = pygame.Rect(773, 744, 554, 66)
         self._button(start_rect, "START AI DEMO   [ENTER]", "start", YELLOW, size=20)
@@ -279,8 +285,8 @@ class UIRenderer:
         self._draw_footer(session)
 
     def _draw_header(self, session: GameSession) -> None:
-        self._text("PAC-MAN", (35, 24), 32, YELLOW, True)
-        self._text("PATHFINDING LAB", (218, 27), 27, TEXT, True)
+        self._text("ADAPTIVE PAC-MAN", (35, 24), 30, YELLOW, True)
+        self._text("PATHFINDING LAB", (390, 29), 23, TEXT, True)
         self._text(
             f"MAP  {session.map_index + 1:02d}  /  {session.maze.config.name.upper()}",
             (37, 69),
@@ -289,11 +295,14 @@ class UIRenderer:
             True,
         )
 
+        engine = session.last_effective_algorithm.value.upper()
+        if session.auto_mode:
+            engine = f"AUTO→{engine}"
         items = [
             ("SCORE", f"{session.score:04d}", YELLOW),
             ("PELLETS", f"{session.collected}/{session.total_collectibles}", CYAN),
             ("LIVES", "● " * session.lives or "0", PINK),
-            ("ENGINE", session.algorithm.value.upper(), ALGORITHM_COLORS[session.algorithm.value]),
+            ("ENGINE", engine, ALGORITHM_COLORS[session.last_effective_algorithm.value]),
         ]
         x = 690
         for label, value, color in items:
@@ -397,9 +406,32 @@ class UIRenderer:
                 for point in points[:: max(1, len(points) // 10)]:
                     pygame.draw.circle(self.surface, TEXT, point, max(1, cell // 12))
 
-        # Soft danger rings make weighted search behavior visible.
+        # Cell-level risk heatmap plus soft rings make weighted search visible.
         danger_layer = pygame.Surface(self.surface.get_size(), pygame.SRCALPHA)
         if not session.is_frightened(now):
+            if session.show_heatmap:
+                for y in range(maze.height):
+                    for x in range(maze.width):
+                        position = (x, y)
+                        if not maze.is_walkable(position):
+                            continue
+                        penalty = danger_penalty(position, session.ghost_positions)
+                        if penalty <= 0:
+                            continue
+                        alpha = min(115, 14 + int(penalty * 2.3))
+                        color = RED if penalty >= 12 else ORANGE
+                        rect = pygame.Rect(
+                            origin_x + x * cell + 2,
+                            origin_y + y * cell + 2,
+                            max(2, cell - 4),
+                            max(2, cell - 4),
+                        )
+                        pygame.draw.rect(
+                            danger_layer,
+                            (*color, alpha),
+                            rect,
+                            border_radius=max(1, cell // 7),
+                        )
             for ghost in session.ghosts:
                 gx, gy = self._cell_center(origin_x, origin_y, cell, ghost.position)
                 pygame.draw.circle(danger_layer, (*RED, 18), (gx, gy), cell * 3)
@@ -534,80 +566,107 @@ class UIRenderer:
     def _draw_side_panel(self, session: GameSession) -> None:
         x = self.side_rect.left + 20
         width = self.side_rect.width - 40
-        accent = ALGORITHM_COLORS[session.algorithm.value]
-
-        self._text("SELECT SEARCH ENGINE", (x, 140), 15, TEXT, True)
-        self._wrapped_text(
-            session.algorithm.short_description,
-            pygame.Rect(x, 166, width, 42),
-            13,
-            MUTED,
-            2,
+        tab_width = (width - 8) // 2
+        self._button(
+            pygame.Rect(x, 136, tab_width, 38),
+            "PLAY CONTROL",
+            "tab:play",
+            CYAN,
+            active=self.side_tab == "play",
+            size=13,
         )
+        self._button(
+            pygame.Rect(x + tab_width + 8, 136, tab_width, 38),
+            "AI WORKBENCH",
+            "tab:lab",
+            PURPLE,
+            active=self.side_tab == "lab",
+            size=13,
+        )
+
+        if self.side_tab == "lab":
+            self._draw_lab_tab(session, x, width)
+        else:
+            self._draw_play_tab(session, x, width)
+
+    def _draw_play_tab(self, session: GameSession, x: int, width: int) -> None:
+        accent = ALGORITHM_COLORS[session.last_effective_algorithm.value]
+        self._text("SELECT SEARCH ENGINE", (x, 190), 15, TEXT, True)
+        description = (
+            f"AUTO: {session.auto_reason}"
+            if session.auto_mode
+            else session.algorithm.short_description
+        )
+        self._wrapped_text(description, pygame.Rect(x, 214, width, 38), 12, MUTED, 2)
 
         algorithms = list(Algorithm)
         button_width = (width - 10) // 2
         for index, algorithm in enumerate(algorithms):
             row = index // 2
             column = index % 2
-            if index == 4:
-                rect = pygame.Rect(x, 303, width, 42)
-            else:
-                rect = pygame.Rect(x + column * (button_width + 10), 207 + row * 48, button_width, 42)
+            rect = (
+                pygame.Rect(x, 352, width, 40)
+                if index == 4
+                else pygame.Rect(
+                    x + column * (button_width + 10),
+                    258 + row * 47,
+                    button_width,
+                    40,
+                )
+            )
             self._button(
                 rect,
                 f"{index + 1}  {algorithm.value.upper()}",
                 f"algorithm:{algorithm.value}",
                 ALGORITHM_COLORS[algorithm.value],
-                active=session.algorithm == algorithm,
+                active=not session.auto_mode and session.algorithm == algorithm,
                 size=14,
             )
 
-        pygame.draw.line(self.surface, (55, 70, 110), (x, 365), (x + width, 365), 1)
-
+        pygame.draw.line(self.surface, (55, 70, 110), (x, 405), (x + width, 405), 1)
         half = (width - 10) // 2
         run_label = "STOP AI" if session.running else "RUN AI"
         self._button(
-            pygame.Rect(x, 382, half, 43),
+            pygame.Rect(x, 419, half, 40),
             run_label,
             "toggle_run",
             GREEN if not session.running else RED,
             active=session.running,
         )
-        self._button(pygame.Rect(x + half + 10, 382, half, 43), "STEP ONCE", "step", CYAN)
-        self._button(pygame.Rect(x, 433, half, 43), "COMPARE", "compare", PURPLE)
-        self._button(pygame.Rect(x + half + 10, 433, half, 43), "RESET", "reset", ORANGE)
-        self._button(pygame.Rect(x, 484, half, 43), "NEXT MAP", "next_map", PINK)
+        self._button(pygame.Rect(x + half + 10, 419, half, 40), "STEP ONCE", "step", CYAN)
+        self._button(pygame.Rect(x, 467, half, 40), "COMPARE", "compare", PURPLE)
+        self._button(pygame.Rect(x + half + 10, 467, half, 40), "RESET", "reset", ORANGE)
+        self._button(pygame.Rect(x, 515, half, 40), "NEXT MAP", "next_map", PINK)
         ghost_label = "GHOSTS: LIVE" if session.dynamic_ghosts else "GHOSTS: FROZEN"
         self._button(
-            pygame.Rect(x + half + 10, 484, half, 43),
+            pygame.Rect(x + half + 10, 515, half, 40),
             ghost_label,
             "toggle_ghosts",
             RED if session.dynamic_ghosts else MUTED,
             active=session.dynamic_ghosts,
-            size=13,
+            size=12,
         )
 
-        mission_rect = pygame.Rect(x, 546, width, 95)
+        mission_rect = pygame.Rect(x, 570, width, 82)
         pygame.draw.rect(self.surface, (15, 26, 58), mission_rect, border_radius=12)
-        pygame.draw.rect(self.surface, (*accent,), mission_rect, width=1, border_radius=12)
-        self._text("MISSION PROGRESS", (mission_rect.left + 14, mission_rect.top + 12), 12, MUTED, True)
+        pygame.draw.rect(self.surface, accent, mission_rect, width=1, border_radius=12)
+        self._text("MISSION PROGRESS", (mission_rect.left + 14, mission_rect.top + 10), 11, MUTED, True)
         self._text(
             f"{session.collected} of {session.total_collectibles} pellets secured",
-            (mission_rect.left + 14, mission_rect.top + 34),
-            15,
+            (mission_rect.left + 14, mission_rect.top + 30),
+            14,
             TEXT,
             True,
         )
-        track = pygame.Rect(mission_rect.left + 14, mission_rect.top + 64, mission_rect.width - 28, 12)
-        pygame.draw.rect(self.surface, (30, 40, 72), track, border_radius=6)
+        track = pygame.Rect(mission_rect.left + 14, mission_rect.top + 57, mission_rect.width - 28, 10)
+        pygame.draw.rect(self.surface, (30, 40, 72), track, border_radius=5)
         fill = track.copy()
         fill.width = max(0, int(track.width * session.progress))
         if fill.width:
-            pygame.draw.rect(self.surface, accent, fill, border_radius=6)
+            pygame.draw.rect(self.surface, accent, fill, border_radius=5)
 
         result = session.last_result
-        metrics_rect = pygame.Rect(x, 653, width, 111)
+        metrics_rect = pygame.Rect(x, 662, width, 98)
         pygame.draw.rect(self.surface, (15, 26, 58), metrics_rect, border_radius=12)
         labels = (
             ("STEPS", str(result.steps) if result else "–"),
@@ -617,37 +676,132 @@ class UIRenderer:
         )
         item_width = metrics_rect.width // 2
         for index, (label, value) in enumerate(labels):
-            column = index % 2
-            row = index // 2
-            left = metrics_rect.left + column * item_width + 14
-            top = metrics_rect.top + row * 50 + 10
-            self._text(label, (left, top), 10, MUTED, True)
-            self._text(value, (left, top + 18), 16, accent, True)
+            left = metrics_rect.left + (index % 2) * item_width + 14
+            top = metrics_rect.top + (index // 2) * 43 + 8
+            self._text(label, (left, top), 9, MUTED, True)
+            self._text(value, (left, top + 16), 15, accent, True)
 
-        self._text("SPEED", (x, 783), 11, MUTED, True)
-        speed_x = x + 74
+        self._text("SPEED", (x, 785), 10, MUTED, True)
+        speed_x = x + 70
         for speed in (1, 2, 4):
-            rect = pygame.Rect(speed_x, 773, 58, 32)
             self._button(
-                rect,
+                pygame.Rect(speed_x, 774, 58, 30),
                 f"{speed}×",
                 f"speed:{speed}",
                 accent,
                 active=session.speed == speed,
-                size=13,
+                size=12,
             )
             speed_x += 66
+        mode = "POWER MODE" if session.is_frightened() else session.status.upper()
+        self._text(mode[:47], (self.side_rect.right - 20, 817), 9, MUTED, True, "bottomright")
 
-        frightened = session.is_frightened()
-        mode = "POWER MODE" if frightened else ("PAUSED" if session.paused else session.status.upper())
-        mode_color = BLUE if frightened else (ORANGE if session.paused else MUTED)
-        self._text(mode[:42], (self.side_rect.right - 20, 816), 10, mode_color, True, "bottomright")
+    def _draw_lab_tab(self, session: GameSession, x: int, width: int) -> None:
+        self._text("ADAPTIVE SEARCH CONTROLS", (x, 190), 15, TEXT, True)
+        auto_label = (
+            f"AUTO SELECTOR: ON  →  {session.last_effective_algorithm.value.upper()}"
+            if session.auto_mode
+            else "AUTO SELECTOR: OFF"
+        )
+        self._button(
+            pygame.Rect(x, 216, width, 42),
+            auto_label,
+            "toggle_auto",
+            GREEN,
+            active=session.auto_mode,
+            size=13,
+        )
+
+        self._text("A* HEURISTIC", (x, 276), 11, MUTED, True)
+        gap = 7
+        heuristic_width = (width - gap * 2) // 3
+        for index, mode in enumerate(HeuristicMode):
+            self._button(
+                pygame.Rect(x + index * (heuristic_width + gap), 298, heuristic_width, 38),
+                mode.value.upper(),
+                f"heuristic:{mode.value}",
+                PINK,
+                active=session.heuristic_mode is mode,
+                size=11,
+            )
+
+        half = (width - 10) // 2
+        ghost_mode = "GHOST AI: ADVANCED" if session.advanced_ghost_ai else "GHOST AI: CLASSIC"
+        self._button(
+            pygame.Rect(x, 352, half, 40),
+            ghost_mode,
+            "toggle_ghost_ai",
+            RED,
+            active=session.advanced_ghost_ai,
+            size=11,
+        )
+        self._button(
+            pygame.Rect(x + half + 10, 352, half, 40),
+            "RISK HEATMAP",
+            "toggle_heatmap",
+            ORANGE,
+            active=session.show_heatmap,
+            size=11,
+        )
+
+        self._text("RESEARCH TOOLS", (x, 414), 11, MUTED, True)
+        tools = [
+            ("HEURISTICS", "heuristic_compare", PINK),
+            ("EXPERIMENT", "experiment", PURPLE),
+            ("EXPLAIN ROUTE", "explain", CYAN),
+            ("REPLAY", "replay", BLUE),
+            ("EXPORT CSV/PDF", "export_bundle", GREEN),
+            ("MAP STUDIO", "editor", YELLOW),
+        ]
+        for index, (label, action, color) in enumerate(tools):
+            column = index % 2
+            row = index // 2
+            self._button(
+                pygame.Rect(x + column * (half + 10), 436 + row * 48, half, 40),
+                label,
+                action,
+                color,
+                size=12,
+            )
+
+        insight = pygame.Rect(x, 592, width, 164)
+        pygame.draw.rect(self.surface, (15, 26, 58), insight, border_radius=12)
+        pygame.draw.rect(self.surface, (*PURPLE,), insight, width=1, border_radius=12)
+        self._text("LIVE INTELLIGENCE", (insight.left + 14, insight.top + 11), 11, PURPLE, True)
+        if session.auto_mode:
+            y = self._wrapped_text(
+                session.auto_reason.capitalize() + ".",
+                pygame.Rect(insight.left + 14, insight.top + 34, insight.width - 28, 42),
+                12,
+                TEXT,
+                2,
+            )
+        else:
+            y = self._wrapped_text(
+                f"Manual {session.algorithm.value}: {session.algorithm.short_description}.",
+                pygame.Rect(insight.left + 14, insight.top + 34, insight.width - 28, 42),
+                12,
+                TEXT,
+                2,
+            )
+        self._text("GHOST TEAM", (insight.left + 14, y + 8), 10, MUTED, True)
+        roster = "  •  ".join(
+            f"{ghost.name}: {ghost.behavior.value}" for ghost in session.ghosts
+        )
+        self._wrapped_text(
+            roster or "No ghosts on this map",
+            pygame.Rect(insight.left + 14, y + 27, insight.width - 28, 50),
+            11,
+            MUTED,
+            2,
+        )
+        self._text(session.status.upper()[:48], (self.side_rect.right - 20, 817), 9, MUTED, True, "bottomright")
 
     def _draw_footer(self, session: GameSession) -> None:
         self._text(
-            "ENTER run/stop     SPACE pause     S step     C compare     R reset     M map     H help",
+            "ENTER run   SPACE pause   S step   C compare   L workbench   E explain   X experiment   F studio   H help",
             (35, 867),
-            14,
+            12,
             MUTED,
         )
         target = session.target
@@ -664,7 +818,7 @@ class UIRenderer:
         self._text("ALGORITHM COMPARISON", (rect.left + 38, rect.top + 30), 29, TEXT, True)
         target = session.comparison_target()
         self._text(
-            f"Same snapshot: start {session.player}  /  target {target}  /  weighted danger active",
+            f"Same snapshot: start {session.player}  /  target {target}  /  A*: {session.heuristic_mode.value}",
             (rect.left + 38, rect.top + 71),
             15,
             MUTED,
@@ -722,7 +876,7 @@ class UIRenderer:
 
         note_rect = pygame.Rect(rect.left + 38, rect.bottom - 91, 810, 54)
         self._wrapped_text(
-            "Interpretation: fewer expanded nodes means less search work. UCS and Dijkstra normally match here because all movement costs are non-negative and the task uses one source and one target.",
+            "Interpretation: fewer expanded nodes means less search work. UCS and Dijkstra normally match because costs are non-negative. A* uses the selected heuristic while every algorithm receives the same snapshot.",
             note_rect,
             14,
             MUTED,
@@ -735,6 +889,464 @@ class UIRenderer:
             CYAN,
         )
 
+    def draw_heuristic_modal(self, session: GameSession) -> None:
+        self.buttons.clear()
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((1, 3, 12, 214))
+        self.surface.blit(overlay, (0, 0))
+        rect = pygame.Rect(235, 165, 970, 570)
+        self._panel(rect, PINK, 252, 24)
+        self._text("A* HEURISTIC LAB", (rect.left + 38, rect.top + 30), 30, TEXT, True)
+        self._text(
+            "Three A* variants, one unchanged maze snapshot",
+            (rect.left + 38, rect.top + 71),
+            15,
+            MUTED,
+        )
+        headers = ("MODE", "STEPS", "COST", "EXPANDED", "FRONTIER", "TIME", "OPTIMAL?")
+        starts = (285, 520, 610, 700, 835, 945, 1080)
+        y = rect.top + 125
+        for label, x in zip(headers, starts):
+            self._text(label, (x, y), 11, MUTED, True)
+        pygame.draw.line(self.surface, (68, 82, 129), (275, y + 25), (1160, y + 25), 1)
+        y += 55
+        max_expanded = max((item.expanded_nodes for item in session.heuristic_results), default=1)
+        for result in session.heuristic_results:
+            mode = result.heuristic_mode or HeuristicMode.MANHATTAN
+            active = mode is session.heuristic_mode
+            row = pygame.Rect(270, y - 12, 895, 78)
+            layer = pygame.Surface(row.size, pygame.SRCALPHA)
+            pygame.draw.rect(
+                layer,
+                (*PINK, 34 if active else 12),
+                layer.get_rect(),
+                border_radius=11,
+            )
+            self.surface.blit(layer, row)
+            values = (
+                mode.value,
+                str(result.steps),
+                f"{result.path_cost:.0f}",
+                str(result.expanded_nodes),
+                str(result.frontier_peak),
+                f"{result.elapsed_ms:.3f}",
+                "YES" if mode.guarantees_optimality else "NO",
+            )
+            for index, (value, x) in enumerate(zip(values, starts)):
+                self._text(value, (x, y), 16 if index == 0 else 14, PINK if index == 0 else TEXT, index == 0)
+            bar = pygame.Rect(285, y + 31, 310, 6)
+            pygame.draw.rect(self.surface, (32, 44, 80), bar, border_radius=3)
+            fill = bar.copy()
+            fill.width = max(3, int(bar.width * result.expanded_nodes / max_expanded))
+            pygame.draw.rect(self.surface, PINK, fill, border_radius=3)
+            self._text(mode.description, (620, y + 27), 11, MUTED)
+            y += 92
+        self._wrapped_text(
+            "Manhattan is usually strongest for four-direction grids. Euclidean remains admissible but gives a weaker estimate. Weighted A* may expand fewer cells by trading away the optimality guarantee.",
+            pygame.Rect(rect.left + 40, rect.bottom - 95, 700, 58),
+            13,
+            MUTED,
+            3,
+        )
+        self._button(
+            pygame.Rect(rect.right - 200, rect.bottom - 76, 160, 43),
+            "CLOSE  [ESC]",
+            "close_modal",
+            CYAN,
+        )
+
+    def draw_experiment_modal(self, session: GameSession) -> None:
+        self.buttons.clear()
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((1, 3, 12, 218))
+        self.surface.blit(overlay, (0, 0))
+        rect = pygame.Rect(115, 92, 1210, 716)
+        self._panel(rect, PURPLE, 252, 24)
+        report = session.experiment_report
+        self._text("REPRODUCIBLE EXPERIMENT", (rect.left + 38, rect.top + 28), 29, TEXT, True)
+        if report is None:
+            self._text("Run the experiment to generate results.", rect.center, 18, MUTED, anchor="center")
+            return
+        self._text(
+            f"{report.map_name}  •  {len(report.scenarios)} fixed targets  •  three timing samples per algorithm",
+            (rect.left + 38, rect.top + 68),
+            14,
+            MUTED,
+        )
+
+        headers = ("ALGORITHM", "SUCCESS", "AVG STEPS", "AVG COST", "AVG EXPANDED", "AVG MS")
+        starts = (160, 365, 470, 595, 710, 865)
+        y = rect.top + 118
+        for label, x in zip(headers, starts):
+            self._text(label, (x, y), 10, MUTED, True)
+        y += 38
+        summaries = report.algorithm_summaries
+        max_expanded = max((item.average_expanded for item in summaries), default=1.0)
+        for summary in summaries:
+            color = ALGORITHM_COLORS[summary.label]
+            values = (
+                summary.label,
+                f"{summary.successful}/{summary.scenarios}",
+                f"{summary.average_steps:.1f}",
+                f"{summary.average_cost:.1f}",
+                f"{summary.average_expanded:.1f}",
+                f"{summary.average_ms:.4f}",
+            )
+            for index, (value, x) in enumerate(zip(values, starts)):
+                self._text(value, (x, y), 15, color if index == 0 else TEXT, index == 0)
+            chart = pygame.Rect(980, y + 2, 275, 12)
+            pygame.draw.rect(self.surface, (31, 42, 76), chart, border_radius=6)
+            fill = chart.copy()
+            fill.width = max(4, int(chart.width * summary.average_expanded / max_expanded))
+            pygame.draw.rect(self.surface, color, fill, border_radius=6)
+            y += 55
+
+        heuristic_rect = pygame.Rect(rect.left + 38, rect.top + 455, 720, 188)
+        pygame.draw.rect(self.surface, (14, 24, 55), heuristic_rect, border_radius=14)
+        pygame.draw.rect(self.surface, (*PINK,), heuristic_rect, width=1, border_radius=14)
+        self._text("A* HEURISTIC SUMMARY", (heuristic_rect.left + 18, heuristic_rect.top + 14), 13, PINK, True)
+        hx = (heuristic_rect.left + 18, heuristic_rect.left + 240, heuristic_rect.left + 355, heuristic_rect.left + 500, heuristic_rect.left + 620)
+        for label, x in zip(("MODE", "STEPS", "COST", "EXPANDED", "MS"), hx):
+            self._text(label, (x, heuristic_rect.top + 43), 9, MUTED, True)
+        hy = heuristic_rect.top + 68
+        for item in report.heuristic_summaries:
+            for value, x in zip(
+                (
+                    item.label,
+                    f"{item.average_steps:.1f}",
+                    f"{item.average_cost:.1f}",
+                    f"{item.average_expanded:.1f}",
+                    f"{item.average_ms:.4f}",
+                ),
+                hx,
+            ):
+                self._text(value, (x, hy), 12, TEXT)
+            hy += 34
+
+        note = pygame.Rect(rect.left + 785, rect.top + 455, 385, 188)
+        pygame.draw.rect(self.surface, (14, 24, 55), note, border_radius=14)
+        pygame.draw.rect(self.surface, (*GREEN,), note, width=1, border_radius=14)
+        self._text("EVIDENCE OUTPUT", (note.left + 18, note.top + 14), 13, GREEN, True)
+        self._wrapped_text(
+            "Export creates a detailed CSV, a presentation-ready PDF summary, and a JSON replay. Timing varies by computer; route cost, steps, and expansion counts are deterministic for the same snapshot.",
+            pygame.Rect(note.left + 18, note.top + 43, note.width - 36, 105),
+            12,
+            MUTED,
+            4,
+        )
+        self._button(
+            pygame.Rect(note.left + 18, note.bottom - 50, 170, 35),
+            "EXPORT BUNDLE",
+            "export_bundle",
+            GREEN,
+            size=11,
+        )
+        self._button(
+            pygame.Rect(rect.right - 195, rect.bottom - 53, 155, 36),
+            "CLOSE  [ESC]",
+            "close_modal",
+            CYAN,
+            size=12,
+        )
+
+    def draw_explanation_modal(self, session: GameSession) -> None:
+        self.buttons.clear()
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((1, 3, 12, 216))
+        self.surface.blit(overlay, (0, 0))
+        rect = pygame.Rect(215, 115, 1010, 670)
+        accent = ALGORITHM_COLORS[session.last_effective_algorithm.value]
+        self._panel(rect, accent, 252, 24)
+        explanation = explain_result(
+            session.last_effective_algorithm,
+            session.last_result,
+            session.heuristic_mode,
+            auto_reason=session.auto_reason if session.auto_mode else "",
+        )
+        self._text("EXPLAINABLE AI", (rect.left + 40, rect.top + 31), 14, accent, True)
+        self._text(explanation.title.upper(), (rect.left + 40, rect.top + 58), 29, TEXT, True)
+        cards = [
+            ("DATA STRUCTURE", explanation.data_structure),
+            ("EXPANSION RULE", explanation.priority_rule),
+            ("CORRECTNESS", explanation.guarantee),
+            ("ROUTE REASON", explanation.route_reason),
+            ("CURRENT EVIDENCE", explanation.observation),
+        ]
+        y = rect.top + 118
+        for index, (label, body) in enumerate(cards):
+            height = 86 if index < 4 else 112
+            card = pygame.Rect(rect.left + 40, y, rect.width - 80, height)
+            pygame.draw.rect(self.surface, (14, 24, 55), card, border_radius=12)
+            pygame.draw.rect(self.surface, (*accent,), card, width=1, border_radius=12)
+            self._text(f"{index + 1:02d}  {label}", (card.left + 16, card.top + 13), 11, accent, True)
+            self._wrapped_text(
+                body,
+                pygame.Rect(card.left + 16, card.top + 37, card.width - 32, card.height - 44),
+                14,
+                TEXT,
+                3,
+            )
+            y += height + 10
+        self._button(
+            pygame.Rect(rect.right - 200, rect.bottom - 58, 160, 40),
+            "CLOSE  [ESC]",
+            "close_modal",
+            CYAN,
+            size=12,
+        )
+
+    def _draw_replay_grid(
+        self,
+        session: GameSession,
+        frame: ReplayFrame,
+        rect: pygame.Rect,
+    ) -> None:
+        maze = session.maze
+        cell = min(rect.width // maze.width, rect.height // maze.height)
+        width = cell * maze.width
+        height = cell * maze.height
+        ox = rect.centerx - width // 2
+        oy = rect.centery - height // 2
+        for y in range(maze.height):
+            for x in range(maze.width):
+                position = (x, y)
+                cell_rect = pygame.Rect(ox + x * cell, oy + y * cell, cell, cell)
+                if position in maze.walls:
+                    pygame.draw.rect(self.surface, WALL_FILL, cell_rect.inflate(-1, -1), border_radius=2)
+                    pygame.draw.rect(self.surface, WALL_EDGE, cell_rect.inflate(-2, -2), width=1, border_radius=2)
+                else:
+                    pygame.draw.rect(self.surface, (7, 13, 31), cell_rect.inflate(-1, -1), border_radius=2)
+        if len(frame.route) > 1:
+            points = [self._cell_center(ox, oy, cell, position) for position in frame.route]
+            pygame.draw.lines(self.surface, PINK, False, points, max(2, cell // 7))
+        for position in frame.ghosts:
+            self._draw_ghost(self._cell_center(ox, oy, cell, position), int(cell * 0.72), RED, False, 0.0)
+        self._draw_pacman(
+            self._cell_center(ox, oy, cell, frame.player),
+            int(cell * 0.74),
+            (1, 0),
+            0.0,
+        )
+
+    def draw_replay_modal(
+        self,
+        session: GameSession,
+        index: int,
+        playing: bool,
+    ) -> None:
+        self.buttons.clear()
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((1, 3, 12, 220))
+        self.surface.blit(overlay, (0, 0))
+        rect = pygame.Rect(105, 82, 1230, 735)
+        self._panel(rect, BLUE, 252, 24)
+        frames = session.replay.frames
+        if not frames:
+            self._text("No replay frames are available.", rect.center, 18, MUTED, anchor="center")
+            return
+        safe_index = max(0, min(index, len(frames) - 1))
+        frame = frames[safe_index]
+        self._text("MISSION REPLAY", (rect.left + 36, rect.top + 26), 29, TEXT, True)
+        self._text(
+            f"Frame {safe_index + 1} / {len(frames)}  •  Tick {frame.tick}  •  Event: {frame.event}",
+            (rect.left + 36, rect.top + 65),
+            14,
+            MUTED,
+        )
+        grid_rect = pygame.Rect(rect.left + 30, rect.top + 105, 790, 540)
+        pygame.draw.rect(self.surface, (6, 11, 28), grid_rect, border_radius=15)
+        pygame.draw.rect(self.surface, (*BLUE,), grid_rect, width=1, border_radius=15)
+        self._draw_replay_grid(session, frame, grid_rect.inflate(-18, -18))
+
+        info = pygame.Rect(rect.left + 846, rect.top + 105, 350, 540)
+        pygame.draw.rect(self.surface, (14, 24, 55), info, border_radius=15)
+        self._text("FRAME TELEMETRY", (info.left + 20, info.top + 20), 13, BLUE, True)
+        values = [
+            ("Score", str(frame.score)),
+            ("Lives", str(frame.lives)),
+            ("Pellets", str(frame.collected)),
+            ("Player", str(frame.player)),
+            ("Target", str(frame.target or "Auto")),
+            ("Route cells", str(len(frame.route))),
+        ]
+        y = info.top + 60
+        for label, value in values:
+            self._text(label, (info.left + 20, y), 12, MUTED)
+            self._text(value, (info.right - 20, y), 14, TEXT, True, "topright")
+            y += 38
+        self._text("STATUS", (info.left + 20, y + 8), 10, MUTED, True)
+        self._wrapped_text(
+            frame.status,
+            pygame.Rect(info.left + 20, y + 28, info.width - 40, 90),
+            13,
+            TEXT,
+            3,
+        )
+        timeline = pygame.Rect(info.left + 20, info.bottom - 104, info.width - 40, 9)
+        pygame.draw.rect(self.surface, (34, 46, 82), timeline, border_radius=5)
+        progress = timeline.copy()
+        progress.width = max(4, int(timeline.width * safe_index / max(1, len(frames) - 1)))
+        pygame.draw.rect(self.surface, BLUE, progress, border_radius=5)
+        half = (info.width - 50) // 3
+        self._button(pygame.Rect(info.left + 20, info.bottom - 75, half, 38), "◀", "replay_prev", BLUE)
+        self._button(
+            pygame.Rect(info.left + 25 + half, info.bottom - 75, half, 38),
+            "PAUSE" if playing else "PLAY",
+            "replay_toggle",
+            GREEN,
+            active=playing,
+            size=11,
+        )
+        self._button(pygame.Rect(info.left + 30 + half * 2, info.bottom - 75, half, 38), "▶", "replay_next", BLUE)
+        self._button(
+            pygame.Rect(rect.left + 35, rect.bottom - 64, 180, 38),
+            "SAVE REPLAY",
+            "save_replay",
+            GREEN,
+            size=12,
+        )
+        self._button(
+            pygame.Rect(rect.right - 195, rect.bottom - 64, 160, 38),
+            "CLOSE  [ESC]",
+            "close_modal",
+            CYAN,
+            size=12,
+        )
+
+    def draw_export_modal(self, session: GameSession, error: str = "") -> None:
+        self.buttons.clear()
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((1, 3, 12, 218))
+        self.surface.blit(overlay, (0, 0))
+        rect = pygame.Rect(365, 245, 710, 410)
+        color = RED if error else GREEN
+        self._panel(rect, color, 252, 24)
+        title = "EXPORT FAILED" if error else "RESEARCH BUNDLE READY"
+        self._text(title, (rect.centerx, rect.top + 52), 30, color, True, "center")
+        if error:
+            self._wrapped_text(error, pygame.Rect(rect.left + 55, rect.top + 115, rect.width - 110, 120), 15, TEXT, 5)
+        else:
+            self._text("Saved inside the project exports folder:", (rect.left + 55, rect.top + 115), 15, MUTED)
+            y = rect.top + 155
+            for path in session.last_export_paths:
+                self._text("●", (rect.left + 58, y + 1), 13, color, True)
+                self._text(path.name, (rect.left + 82, y), 15, TEXT, True)
+                y += 38
+            self._wrapped_text(
+                "The CSV contains raw scenario data, the PDF contains summary tables, and the JSON file stores the replay timeline.",
+                pygame.Rect(rect.left + 55, y + 12, rect.width - 110, 70),
+                13,
+                MUTED,
+                3,
+            )
+        self._button(
+            pygame.Rect(rect.centerx - 90, rect.bottom - 68, 180, 42),
+            "CLOSE",
+            "close_modal",
+            CYAN,
+        )
+
+    def draw_editor(self, editor: MapEditor, now: float) -> None:
+        self.buttons.clear()
+        self._background_details(now)
+        self._text("MAP STUDIO", (38, 25), 33, YELLOW, True)
+        self._text("SAFE CUSTOM MAZE EDITOR", (285, 33), 20, TEXT, True)
+        self._text(
+            "Edits use a copy. Packaged maps remain unchanged until a new validated JSON map is saved.",
+            (40, 76),
+            13,
+            MUTED,
+        )
+        grid_panel = pygame.Rect(30, 112, 1015, 735)
+        tools_panel = pygame.Rect(1065, 112, 345, 735)
+        self._panel(grid_panel, editor.maze.config.accent, 235)
+        self._panel(tools_panel, PURPLE, 240)
+
+        available = grid_panel.inflate(-34, -34)
+        cell = min(available.width // editor.maze.width, available.height // editor.maze.height)
+        grid_width = cell * editor.maze.width
+        grid_height = cell * editor.maze.height
+        ox = available.centerx - grid_width // 2
+        oy = available.centery - grid_height // 2
+        self.editor_grid_rect = pygame.Rect(ox, oy, grid_width, grid_height)
+
+        maze = editor.maze
+        for y in range(maze.height):
+            for x in range(maze.width):
+                position = (x, y)
+                rect = pygame.Rect(ox + x * cell, oy + y * cell, cell, cell)
+                if position in maze.walls:
+                    pygame.draw.rect(self.surface, WALL_FILL, rect.inflate(-2, -2), border_radius=3)
+                    pygame.draw.rect(self.surface, WALL_EDGE, rect.inflate(-3, -3), width=1, border_radius=3)
+                    continue
+                pygame.draw.rect(self.surface, (7, 13, 31), rect.inflate(-1, -1), border_radius=2)
+                cost = maze.terrain_costs.get(position, 1)
+                if cost > 1:
+                    color = PURPLE if cost == 2 else PINK
+                    layer = pygame.Surface((max(2, cell - 4), max(2, cell - 4)), pygame.SRCALPHA)
+                    layer.fill((*color, 70))
+                    self.surface.blit(layer, (rect.x + 2, rect.y + 2))
+        for position in maze.foods:
+            self._glow_circle(self._cell_center(ox, oy, cell, position), max(2, cell // 9), YELLOW)
+        for position in maze.power_foods:
+            self._glow_circle(self._cell_center(ox, oy, cell, position), max(4, cell // 5), PINK, TEXT)
+        for position in maze.ghost_starts:
+            self._draw_ghost(self._cell_center(ox, oy, cell, position), int(cell * 0.72), RED, False, now)
+        self._draw_pacman(self._cell_center(ox, oy, cell, maze.start), int(cell * 0.72), (1, 0), now)
+        self._draw_exit(self._cell_center(ox, oy, cell, maze.exit), cell, True, now)
+
+        tx = tools_panel.left + 18
+        tw = tools_panel.width - 36
+        self._text("BRUSH TOOLS", (tx, 135), 14, TEXT, True)
+        for index, tool in enumerate(EditorTool, start=1):
+            self._button(
+                pygame.Rect(tx, 164 + (index - 1) * 46, tw, 38),
+                f"{index}   {tool.value.upper()}",
+                f"editor_tool:{tool.value}",
+                CYAN if tool in {EditorTool.FLOOR, EditorTool.WALL} else PURPLE,
+                active=editor.tool is tool,
+                size=12,
+            )
+        stats_y = 164 + len(EditorTool) * 46 + 6
+        stats = pygame.Rect(tx, stats_y, tw, 86)
+        pygame.draw.rect(self.surface, (14, 24, 55), stats, border_radius=10)
+        self._text("MAP CONTENT", (stats.left + 12, stats.top + 10), 10, MUTED, True)
+        self._text(
+            f"Pellets {len(maze.foods) + len(maze.power_foods)}   Ghosts {len(maze.ghost_starts)}   Weights {len(maze.terrain_costs)}",
+            (stats.left + 12, stats.top + 31),
+            11,
+            TEXT,
+        )
+        self._wrapped_text(editor.status, pygame.Rect(stats.left + 12, stats.top + 51, stats.width - 24, 30), 10, YELLOW, 1)
+        button_y = tools_panel.bottom - 118
+        third = (tw - 12) // 3
+        self._button(pygame.Rect(tx, button_y, third, 42), "BACK", "editor_back", MUTED, size=11)
+        self._button(pygame.Rect(tx + third + 6, button_y, third, 42), "VALIDATE", "editor_validate", CYAN, size=10)
+        self._button(pygame.Rect(tx + (third + 6) * 2, button_y, third, 42), "SAVE & PLAY", "editor_save", GREEN, size=9)
+        self._text(
+            "1–9 tools  •  V validate  •  S save  •  Esc back",
+            (40, 870),
+            12,
+            MUTED,
+        )
+
+    def editor_cell_at(
+        self,
+        position: tuple[int, int],
+        editor: MapEditor,
+    ) -> Position | None:
+        if not self.editor_grid_rect.collidepoint(position):
+            return None
+        cell = self.editor_grid_rect.width // editor.maze.width
+        if cell <= 0:
+            return None
+        x = (position[0] - self.editor_grid_rect.left) // cell
+        y = (position[1] - self.editor_grid_rect.top) // cell
+        candidate = (int(x), int(y))
+        if 0 <= candidate[0] < editor.maze.width and 0 <= candidate[1] < editor.maze.height:
+            return candidate
+        return None
+
     def draw_help_modal(self) -> None:
         self.buttons.clear()
         overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
@@ -744,11 +1356,11 @@ class UIRenderer:
         self._panel(rect, CYAN, 250, 24)
         self._text("HOW TO USE THE LAB", (rect.left + 38, rect.top + 32), 30, TEXT, True)
         sections = [
-            ("1  Choose an algorithm", "Press 1–5 or click an algorithm. A* is the recommended default for weighted maps."),
+            ("1  Choose manual or AUTO", "Press 1–5 for a fixed search engine, or use the AI Workbench to enable explainable automatic selection."),
             ("2  Run or inspect one step", "Run AI starts automatic play. Step Once advances Pac-Man by one planned cell."),
             ("3  Read the visualization", "Cyan cells show explored states. The bright line is the selected route. Red auras add danger cost."),
-            ("4  Compare fairly", "Compare runs all five searches from the same current cell to the same target."),
-            ("5  Complete the mission", "Collect every pellet, use power cores against ghosts, then enter the green exit gate."),
+            ("4  Open the AI Workbench", "Compare heuristics, run experiments, explain a route, replay a mission, export reports, or open Map Studio."),
+            ("5  Complete the mission", "Collect every pellet, adapt to four ghost behaviors, then enter the unlocked green exit."),
         ]
         y = rect.top + 95
         for title, body in sections:

@@ -23,7 +23,11 @@ class MazeTests(unittest.TestCase):
                 }
                 self.assertTrue(expected.issubset(reachable))
                 self.assertNotEqual(maze.start, maze.exit)
-                self.assertGreater(len(maze.foods), 10)
+                minimum_food = 1 if path.parent.name == "custom" else 11
+                self.assertGreaterEqual(
+                    len(maze.foods) + len(maze.power_foods),
+                    minimum_food,
+                )
                 self.assertTrue(all(cost >= 1 for cost in maze.terrain_costs.values()))
 
     def test_generation_is_deterministic(self) -> None:
@@ -38,4 +42,3 @@ class MazeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

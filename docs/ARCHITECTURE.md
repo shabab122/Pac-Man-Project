@@ -1,35 +1,46 @@
 # Architecture and Data Flow
 
+## Design goals
+
+The upgraded architecture preserves the original five algorithms and game rules
+while keeping editing, experiments, explanations, replay, reporting, and Pygame
+rendering isolated. Search and gameplay logic can still run in a headless test.
+
 ## Components
 
 | Module | Responsibility |
 |---|---|
-| `main.py` | Parses normal, screenshot, and smoke-test launch options |
-| `pacman_ai/app.py` | Owns the event loop, timers, scenes, and UI actions |
-| `pacman_ai/ui.py` | Draws the menu, maze, entities, controls, and dialogs |
-| `pacman_ai/session.py` | Stores game state and applies gameplay rules |
-| `pacman_ai/planner.py` | Builds costs, chooses targets, and starts searches |
-| `pacman_ai/algorithms.py` | Implements all five algorithms and result metrics |
-| `pacman_ai/maze.py` | Loads JSON, generates a connected maze, and validates it |
-| `pacman_ai/models.py` | Defines shared algorithms, positions, entities, and results |
-| `pacman_ai/audio.py` | Produces optional short sound effects in memory |
+| `main.py` | Normal launch, screenshot, smoke test, and QA-gallery options |
+| `pacman_ai/app.py` | Event loop, scenes, timers, actions, replay playback |
+| `pacman_ai/ui.py` | Menu, game, workbench, modals, charts, and Map Studio |
+| `pacman_ai/session.py` | Game state, ghost policies, AUTO, replay, experiments |
+| `pacman_ai/planner.py` | Cost model, target choice, AUTO rules, comparisons |
+| `pacman_ai/algorithms.py` | Five searches and three A* heuristic modes |
+| `pacman_ai/maze.py` | Generated/explicit JSON loading and validation |
+| `pacman_ai/editor.py` | Safe editable copy and new-file map saving |
+| `pacman_ai/experiments.py` | Controlled benchmarks and CSV/PDF export |
+| `pacman_ai/replay.py` | Bounded logical frames and JSON serialization |
+| `pacman_ai/explain.py` | Human-readable decision and metric explanations |
+| `pacman_ai/models.py` | Shared enums and data classes |
+| `pacman_ai/audio.py` | Optional in-memory sound effects |
 
-## Planning flow
+## Runtime flow
 
-```text
-Input event
-  -> GameSession requests a target
-  -> Planner builds SearchProblem
-  -> Selected algorithm explores the maze
-  -> SearchResult contains path and metrics
-  -> Session moves Pac-Man and applies game rules
-  -> UI renders the updated state
+```mermaid
+flowchart TD
+    A["Input or timer"] --> B["GameSession"]
+    B --> C["Target and cost model"]
+    C --> D["Selected search"]
+    D --> E["SearchResult"]
+    E --> F["Move and game rules"]
+    F --> G["Replay and metrics"]
+    G --> H["Pygame renderer"]
 ```
 
-The search layer does not import Pygame. The game rules can therefore be tested
-without creating a window.
+The search layer never imports Pygame. Tests can construct a `SearchProblem`
+with a tiny in-memory graph and verify algorithm behavior directly.
 
-## SearchProblem contract
+## Search contract
 
 Every algorithm receives:
 
@@ -42,25 +53,83 @@ SearchProblem(
 )
 ```
 
-This dependency-injection approach prevents each algorithm from knowing how the
-maze, terrain, or ghosts are stored. It also lets the tests use a tiny in-memory
-grid.
+Every algorithm returns a `SearchResult` containing:
+
+- `found`;
+- reconstructed `path`;
+- deterministic `explored_order`;
+- weighted `path_cost`;
+- measured `elapsed_ms`;
+- `frontier_peak`;
+- A* heuristic metadata when applicable.
+
+## Compatibility boundary
+
+The original behavior remains selectable:
+
+- manual BFS, DFS, UCS, Dijkstra, and Manhattan A*;
+- classic BFS ghost chase;
+- packaged generated maps;
+- original play controls and same-snapshot comparison.
+
+Upgrades wrap or extend these interfaces:
+
+- AUTO chooses an existing `Algorithm`; it is not a sixth algorithm.
+- Heuristic mode is an optional keyword with Manhattan as the default.
+- advanced ghosts are a session preference that can be disabled.
+- Map Studio edits a deep logical copy and writes an explicit map separately.
+- replay and experiments observe session/search outputs rather than changing
+  algorithm code.
+
+## Map formats
+
+### Generated map
+
+The original JSON format stores a seed, dimensions, entity counts, loop chance,
+and accent color. `Maze.generate` recreates the same connected maze.
+
+### Explicit custom map
+
+Map Studio writes `format: explicit-v1` with exact walls, start, exit, pellets,
+ghost starts, and weighted terrain. Loading applies the same validation used for
+packaged maps.
+
+Saving never overwrites a packaged map. New files are created under
+`maps/custom/`.
+
+## Experiment and export flow
+
+```mermaid
+flowchart LR
+    A["Fixed targets"] --> B["5 algorithms"]
+    A --> C["3 A* modes"]
+    B --> D["ExperimentReport"]
+    C --> D
+    D --> E["CSV"]
+    D --> F["PDF"]
+    G["ReplayRecorder"] --> H["JSON replay"]
+```
+
+Each algorithm receives an unchanged scenario snapshot. CSV contains raw rows;
+PDF contains summaries; replay contains logical frames.
 
 ## Failure handling
 
-- Invalid or missing map files raise a clear startup error.
-- Maps are checked for unreachable entities.
-- Search returns `found=False` and an empty path instead of indexing a missing
-  parent when no route exists.
-- A blocked live route is discarded and replanned.
-- Audio failure disables sound but does not stop the visual demo.
-- End states stop automatic movement and provide restart or menu actions.
+- Missing/invalid maps raise explicit errors.
+- Unreachable entities and open borders are rejected.
+- Search returns `found=False` and an empty path when no route exists.
+- A live route blocked by a ghost is discarded and replanned.
+- Replay is bounded to avoid unlimited memory growth.
+- Map Studio validates before writing and refuses filename overwrites.
+- PDF dependencies are imported lazily and give a clear installation error.
+- Audio failure disables sound without stopping the game.
+- Packaged maps remain available even if a custom-map edit is invalid.
 
-## Extension points
+## Maintainability
 
-- Add another algorithm to `Algorithm`, implement it in `algorithms.py`, and add
-  it to `SEARCH_FUNCTIONS`.
-- Add a map by copying one JSON configuration and changing its seed or size.
-- Replace the target-selection shortlist with a global food-order optimizer.
-- Add replay serialization at the session layer without changing search code.
+- Dataclasses and enums make cross-module values explicit.
+- Deterministic neighbor order and map seeds keep demonstrations reproducible.
+- Runtime export code uses standard CSV/JSON plus ReportLab for PDF.
+- Original regression tests run together with upgrade tests.
+- UI tabs prevent advanced tools from crowding ordinary gameplay.
 

@@ -1,2 +1,1 @@
-"""Automated tests for Optimized Pac-Man AI."""
-
+"""Automated tests for Adaptive Pac-Man AI."""

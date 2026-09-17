@@ -9,4 +9,7 @@ htmlcov/
 dist/
 build/
 *.spec
-
+exports/*
+!exports/README.md
+qa_gallery*/
+maps/custom/*.json

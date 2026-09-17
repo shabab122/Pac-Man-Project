@@ -27,6 +27,31 @@ class MapConfig:
     accent: tuple[int, int, int]
 
     @classmethod
+    def for_explicit_map(cls, data: dict[str, Any]) -> "MapConfig":
+        """Build display metadata for a hand-authored map."""
+
+        width = int(data["width"])
+        height = int(data["height"])
+        if width < 11 or height < 11:
+            raise ValueError("Custom map width and height must be at least 11")
+        accent_values = tuple(int(value) for value in data.get("accent", (45, 224, 255)))
+        if len(accent_values) != 3 or any(not 0 <= value <= 255 for value in accent_values):
+            raise ValueError("accent must contain three RGB values from 0 to 255")
+        return cls(
+            map_id=str(data.get("id", "custom_map")),
+            name=str(data.get("name", "Custom Map")),
+            width=width,
+            height=height,
+            seed=int(data.get("seed", 0)),
+            loop_chance=0.0,
+            food_count=len(data.get("foods", [])),
+            power_food_count=len(data.get("power_foods", [])),
+            ghost_count=len(data.get("ghost_starts", [])),
+            terrain_count=len(data.get("terrain_costs", [])),
+            accent=accent_values,
+        )
+
+    @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "MapConfig":
         required = {
             "id",
@@ -100,7 +125,92 @@ class Maze:
             raise FileNotFoundError(f"Map file not found: {path}") from exc
         except json.JSONDecodeError as exc:
             raise ValueError(f"Map file contains invalid JSON: {path}") from exc
+        if data.get("format") == "explicit-v1":
+            return cls.from_explicit_dict(data)
         return cls.generate(MapConfig.from_dict(data))
+
+    @staticmethod
+    def _positions(values: Iterable[Iterable[int]], field_name: str) -> set[Position]:
+        positions: set[Position] = set()
+        for value in values:
+            pair = tuple(int(item) for item in value)
+            if len(pair) != 2:
+                raise ValueError(f"{field_name} entries must contain x and y")
+            positions.add((pair[0], pair[1]))
+        return positions
+
+    @classmethod
+    def from_explicit_dict(cls, data: dict[str, Any]) -> "Maze":
+        """Load a validated map created by the built-in Map Studio."""
+
+        config = MapConfig.for_explicit_map(data)
+        walls = cls._positions(data.get("walls", []), "walls")
+        foods = cls._positions(data.get("foods", []), "foods")
+        power_foods = cls._positions(data.get("power_foods", []), "power_foods")
+        ghost_starts = sorted(
+            cls._positions(data.get("ghost_starts", []), "ghost_starts"),
+            key=lambda item: (item[1], item[0]),
+        )
+        start_values = tuple(int(item) for item in data.get("start", (1, 1)))
+        exit_values = tuple(
+            int(item)
+            for item in data.get("exit", (config.width - 2, config.height - 2))
+        )
+        if len(start_values) != 2 or len(exit_values) != 2:
+            raise ValueError("start and exit must contain x and y")
+
+        terrain_costs: dict[Position, int] = {}
+        for entry in data.get("terrain_costs", []):
+            if not isinstance(entry, dict) or "position" not in entry or "cost" not in entry:
+                raise ValueError("terrain_costs entries require position and cost")
+            position_values = tuple(int(item) for item in entry["position"])
+            if len(position_values) != 2:
+                raise ValueError("terrain position must contain x and y")
+            cost = int(entry["cost"])
+            if cost not in {1, 2, 3}:
+                raise ValueError("terrain cost must be 1, 2, or 3")
+            if cost > 1:
+                terrain_costs[(position_values[0], position_values[1])] = cost
+
+        maze = cls(
+            config=config,
+            walls=walls,
+            start=(start_values[0], start_values[1]),
+            exit=(exit_values[0], exit_values[1]),
+            foods=foods,
+            power_foods=power_foods,
+            ghost_starts=ghost_starts,
+            terrain_costs=terrain_costs,
+        )
+        maze.validate()
+        return maze
+
+    def to_explicit_dict(self, *, name: str | None = None, map_id: str | None = None) -> dict[str, Any]:
+        """Serialize the current maze without changing its generated source."""
+
+        order = lambda position: (position[1], position[0])
+        return {
+            "format": "explicit-v1",
+            "id": map_id or self.config.map_id,
+            "name": name or self.config.name,
+            "width": self.width,
+            "height": self.height,
+            "accent": list(self.config.accent),
+            "start": list(self.start),
+            "exit": list(self.exit),
+            "walls": [list(position) for position in sorted(self.walls, key=order)],
+            "foods": [list(position) for position in sorted(self.foods, key=order)],
+            "power_foods": [
+                list(position) for position in sorted(self.power_foods, key=order)
+            ],
+            "ghost_starts": [list(position) for position in self.ghost_starts],
+            "terrain_costs": [
+                {"position": list(position), "cost": cost}
+                for position, cost in sorted(
+                    self.terrain_costs.items(), key=lambda item: order(item[0])
+                )
+            ],
+        }
 
     @classmethod
     def generate(cls, config: MapConfig) -> "Maze":
@@ -259,6 +369,24 @@ class Maze:
         if self.start == self.exit:
             raise ValueError("Start and exit must be different cells")
 
+        invalid_terrain = [
+            position
+            for position, cost in self.terrain_costs.items()
+            if not self.is_walkable(position) or cost not in {1, 2, 3}
+        ]
+        if invalid_terrain:
+            raise ValueError(f"Map contains invalid weighted terrain: {invalid_terrain}")
+
+        if self.foods & self.power_foods:
+            raise ValueError("A cell cannot contain both a normal and power pellet")
+
+        for x in range(self.width):
+            if (x, 0) not in self.walls or (x, self.height - 1) not in self.walls:
+                raise ValueError("The outer map border must be closed by walls")
+        for y in range(self.height):
+            if (0, y) not in self.walls or (self.width - 1, y) not in self.walls:
+                raise ValueError("The outer map border must be closed by walls")
+
     def is_walkable(self, position: Position) -> bool:
         x, y = position
         return 0 <= x < self.width and 0 <= y < self.height and position not in self.walls
@@ -291,8 +419,10 @@ class Maze:
 def discover_map_files(map_directory: str | Path) -> list[Path]:
     """Return map files in deterministic display order."""
 
-    paths = sorted(Path(map_directory).glob("*.json"))
+    paths = sorted(
+        Path(map_directory).glob("**/*.json"),
+        key=lambda path: ("custom" in path.parts, path.name.lower()),
+    )
     if not paths:
         raise FileNotFoundError(f"No JSON maps found in {Path(map_directory).resolve()}")
     return paths
-

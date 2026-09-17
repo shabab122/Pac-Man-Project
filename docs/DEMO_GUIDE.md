@@ -2,115 +2,183 @@
 
 ## Recommended live demonstration
 
-### 0:00–0:40 — Problem and interface
+### 0:00–0:35 — Problem and established game
 
 Say:
 
-> Traditional movement may be long or unsafe. We model the maze as a graph and
-> compare five search algorithms while Pac-Man collects every pellet and reaches
-> the exit.
+> A route with the fewest cells is not always the safest route. This game turns
+> each walkable cell into a graph node and compares five classical AI searches
+> while terrain and ghosts create different costs.
 
-Open the game and point out the maze, algorithm selector, route overlay, ghost
-danger aura, and metrics.
+Point out the maze, route, explored cells, risk heatmap, score, lives, and exit.
 
-### 0:40–1:30 — BFS versus DFS
+### 0:35–1:20 — Five original algorithms
 
-Freeze ghosts for a repeatable result. Select BFS, click Step Once, and explain
-the breadth-wise explored cells. Select DFS and repeat. Point out that DFS finds
-a route but does not guarantee the shortest one.
+Freeze ghosts for repeatability. Select BFS and step once. Then select DFS.
+Explain:
 
-### 1:30–2:30 — Weighted search
+- BFS uses a queue and guarantees the fewest steps.
+- DFS uses a stack and may find a longer path.
+- BFS/DFS do not optimize weighted danger.
 
-Select UCS or Dijkstra. Point at purple/pink terrain and red ghost danger. Explain
-that the planner may accept extra steps to reduce total cost.
+Select UCS or Dijkstra and show how weighted terrain and risk affect the route.
 
-State clearly:
+State:
 
-> UCS and Dijkstra are mathematically equivalent in this single-goal,
-> non-negative weighted implementation. We included both because the syllabus
-> names both approaches and our code shows their conventional structures.
+> UCS and Dijkstra normally match here because the grid has non-negative costs,
+> one source, one goal, and both expand by the lowest accumulated cost.
 
-### 2:30–3:25 — A* and heuristic
+### 1:20–2:05 — A* heuristic laboratory
 
-Select A*. Explain:
+Select A*, open **AI Workbench**, then **Heuristics**.
 
 ```text
-f(n) = g(n) + h(n)
+f(n) = g(n) + w × h(n)
 ```
 
-`g(n)` is known cost. `h(n)` is Manhattan distance to the target. A* uses both to
-focus exploration while keeping the result optimal under the current snapshot.
+- Manhattan and Euclidean use `w=1` and remain admissible.
+- Weighted A* uses `w=1.65`; it may expand fewer cells but is not guaranteed
+  optimal.
 
-### 3:25–4:15 — Compare mode
+Do not call Weighted A* universally faster or better.
 
-Press `C`. Explain that every row used exactly the same start, target, costs, and
-ghost positions. Compare steps, cost, expanded nodes, frontier peak, and time.
-Do not claim that the smallest runtime is universally fastest from one tiny run.
+### 2:05–2:45 — Explainable AUTO and ghost intelligence
 
-### 4:15–5:00 — Dynamic behavior and conclusion
+Enable AUTO. Point to the selected engine and visible reason.
 
-Close the comparison, activate ghosts, set speed to 2×, and run the AI. Explain
-that a moving ghost can invalidate a static search result, so the controller
-checks the next step and replans.
+Say:
 
-Finish with the limitation: this system uses classical graph search, not machine
-learning or reinforcement learning.
+> AUTO is a transparent controller that chooses one of the five required
+> algorithms. It is not a sixth algorithm.
+
+Show the four ghost policy labels:
+
+- Aggressive;
+- Predictive;
+- Random;
+- Defensive.
+
+Switch to Classic ghost AI briefly to demonstrate backward compatibility.
+
+### 2:45–3:35 — Experiment and explanation
+
+Open **Experiment**. Explain that five deterministic targets and unchanged
+snapshot conditions are used. Compare average steps, cost, expanded nodes, and
+time.
+
+Open **Explain Route** and show:
+
+- data structure;
+- expansion rule;
+- correctness/optimality statement;
+- route reason;
+- current measured evidence.
+
+### 3:35–4:20 — Map Studio and replay
+
+Open **Map Studio**. Select a terrain or pellet brush and edit one safe interior
+cell. Press **Validate**.
+
+Explain:
+
+> The editor works on a copy, checks connectivity and entity placement, then
+> saves a new JSON map. Packaged maps are not overwritten.
+
+Return without saving during a short demo if time is limited. Open **Replay** to
+show logical frames and telemetry.
+
+### 4:20–5:00 — Export and conclusion
+
+Open **Export CSV/PDF**.
+
+- CSV: raw scenario evidence;
+- PDF: formatted summary;
+- JSON: replay timeline.
+
+Finish:
+
+> The upgraded system preserves the original classical searches but adds
+> explainability, controlled experimentation, creation tools, and reproducible
+> evidence. It is classical AI, not reinforcement learning.
 
 ## Likely viva questions
 
 ### Why is this an AI project?
 
-It uses state-space search, goal testing, path cost, heuristic search, and dynamic
-replanning. These are core classical AI problem-solving techniques.
+It uses state-space search, a goal test, path cost, heuristic guidance, dynamic
+replanning, and explainable decision rules.
 
-### Why use a graph?
+### Why is the maze a graph?
 
-Each valid grid cell is a node and each legal move is an edge. Pathfinding then
-becomes a standard graph-search problem.
+Each walkable cell is a node; each legal up/down/left/right move is an edge.
 
-### Why can BFS be unsafe?
+### Why can BFS choose an unsafe path?
 
-BFS minimizes the number of steps and does not read terrain or ghost-risk costs.
-A short path can therefore pass close to a ghost.
+BFS minimizes steps and ignores terrain/risk when choosing. A short route can
+pass close to a ghost.
 
 ### Why is DFS not optimal?
 
-DFS commits to one deep branch based on neighbor order. It can reach the goal
-before examining a much shorter alternative.
+DFS follows one deep branch based on neighbor order and can reach the goal
+before examining shorter or cheaper alternatives.
 
-### Are UCS and Dijkstra different here?
+### Why do UCS and Dijkstra match?
 
-Their naming and common teaching context differ, but with non-negative costs, a
-priority queue, one source, and early stopping at one target, they expand by the
-same accumulated-cost rule and normally return the same result.
+Here both use a min-priority queue, non-negative costs, one source, one target,
+and early stopping. Their accumulated-cost expansion rules therefore match.
 
-### Why is Manhattan distance admissible?
+### Why is Manhattan admissible?
 
-The game moves only up, down, left, or right, and every move costs at least 1.
-Manhattan distance cannot be greater than the real remaining route cost.
+The player moves only horizontally or vertically and each step costs at least
+one. Manhattan distance cannot overestimate the remaining true cost.
 
-### Is A* always faster?
+### Why is Euclidean usually weaker here?
 
-No. It often expands fewer nodes toward one goal when the heuristic is helpful.
-Its worst case can behave like Dijkstra, and measured runtime also includes
-implementation and hardware effects.
+Straight-line distance is no greater than Manhattan distance on this movement
+model, so it gives less specific guidance while remaining admissible.
 
-### What makes the game dynamic?
+### Why can Weighted A* lose optimality?
 
-Ghost positions change after planning. The controller treats a newly occupied
-next cell as invalid and searches again from Pac-Man's current state.
+Multiplying the heuristic by 1.65 can make estimated remaining distance dominate
+known path cost. The search may accept an earlier but more expensive goal route.
 
-### Why freeze ghosts during comparison?
+### Is AUTO machine learning?
 
-A fair comparison requires identical input. If ghosts move between runs, the
-cost function changes and the metrics no longer describe the same problem.
+No. AUTO is an explainable deterministic rule set that selects an existing
+algorithm.
+
+### What makes ghost AI different?
+
+Each ghost has a visible policy: current-position chase, ahead prediction,
+seeded random movement, or defensive retreat/guard behavior.
+
+### How is comparison fair?
+
+Every algorithm receives the same start, goal, map, terrain, ghost positions,
+and power state.
+
+### Why not trust the smallest time alone?
+
+Sub-millisecond measurements vary across computers and background load.
+Deterministic steps, cost, expanded nodes, and frontier peak are stronger
+evidence.
+
+### How does Map Studio protect previous work?
+
+It edits a copied `Maze`, validates it, creates a new timestamped file, and
+refuses to overwrite an existing file.
+
+### What is replay storing?
+
+Logical frames: player, ghosts, route, target, score, lives, event, and status.
+It is inspectable JSON rather than a large video.
 
 ## Backup plan
 
-If the presentation computer cannot open a Pygame window:
+If the classroom machine cannot create a Pygame window:
 
-1. Show `screenshots/gameplay.png`.
-2. Run `python run_tests.py` to prove the logic works.
-3. Explain the comparison table and algorithm guide from the documentation.
-4. Use a team member's verified laptop for the live animation if permitted.
+1. Show the verified images in `screenshots/`.
+2. Open the sample PDF and CSV from `sample_outputs/`.
+3. Run `python run_tests.py`.
+4. Explain the architecture and algorithm tables from the documentation.
 

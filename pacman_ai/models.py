@@ -33,6 +33,43 @@ class Algorithm(str, Enum):
         return self in {Algorithm.UCS, Algorithm.DIJKSTRA, Algorithm.A_STAR}
 
 
+class HeuristicMode(str, Enum):
+    """Heuristic variants available to the A* laboratory."""
+
+    MANHATTAN = "Manhattan"
+    EUCLIDEAN = "Euclidean"
+    WEIGHTED = "Weighted A*"
+
+    @property
+    def short_label(self) -> str:
+        return {
+            HeuristicMode.MANHATTAN: "L1",
+            HeuristicMode.EUCLIDEAN: "L2",
+            HeuristicMode.WEIGHTED: "1.65×",
+        }[self]
+
+    @property
+    def description(self) -> str:
+        return {
+            HeuristicMode.MANHATTAN: "Grid-aware and admissible for four-direction movement",
+            HeuristicMode.EUCLIDEAN: "Straight-line estimate; admissible but less informed here",
+            HeuristicMode.WEIGHTED: "Faster goal bias with no guarantee of the optimal route",
+        }[self]
+
+    @property
+    def guarantees_optimality(self) -> bool:
+        return self is not HeuristicMode.WEIGHTED
+
+
+class GhostBehavior(str, Enum):
+    """Transparent movement policy assigned to an advanced ghost."""
+
+    AGGRESSIVE = "Aggressive"
+    PREDICTIVE = "Predictive"
+    RANDOM = "Random"
+    DEFENSIVE = "Defensive"
+
+
 @dataclass(slots=True)
 class SearchResult:
     """A complete, visualizable result returned by a search algorithm."""
@@ -44,6 +81,7 @@ class SearchResult:
     path_cost: float = 0.0
     elapsed_ms: float = 0.0
     frontier_peak: int = 0
+    heuristic_mode: HeuristicMode | None = None
 
     @property
     def steps(self) -> int:
@@ -64,6 +102,7 @@ class GhostState:
     position: Position
     spawn: Position
     color: tuple[int, int, int]
+    behavior: GhostBehavior = GhostBehavior.AGGRESSIVE
 
 
 @dataclass(slots=True)
@@ -80,4 +119,3 @@ class AggregateMetrics:
         self.searches += 1
         self.expanded_nodes += result.expanded_nodes
         self.planning_ms += result.elapsed_ms
-
