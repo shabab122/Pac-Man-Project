@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 
-from .algorithms import SearchProblem, compare_searches, manhattan, run_search
+from .algorithms import (
+    SearchProblem,
+    compare_a_star_heuristics,
+    compare_searches,
+    manhattan,
+    run_search,
+)
 from .maze import Maze
-from .models import Algorithm, Position, SearchResult
+from .models import Algorithm, HeuristicMode, Position, SearchResult
 
 
 def danger_penalty(position: Position, ghosts: Iterable[Position]) -> float:
@@ -61,10 +67,12 @@ def plan_route(
     goal: Position,
     ghost_positions: Iterable[Position] = (),
     frightened: bool = False,
+    heuristic_mode: HeuristicMode = HeuristicMode.MANHATTAN,
 ) -> SearchResult:
     return run_search(
         algorithm,
         make_problem(maze, start, goal, ghost_positions, frightened),
+        heuristic_mode=heuristic_mode,
     )
 
 
@@ -77,6 +85,7 @@ def choose_target(
     exit_position: Position,
     ghost_positions: Iterable[Position] = (),
     frightened: bool = False,
+    heuristic_mode: HeuristicMode = HeuristicMode.MANHATTAN,
 ) -> tuple[Position, SearchResult]:
     """Choose a reachable collectible, then produce the route to it.
 
@@ -94,6 +103,7 @@ def choose_target(
             exit_position,
             ghost_positions,
             frightened,
+            heuristic_mode,
         )
         return exit_position, result
 
@@ -111,6 +121,7 @@ def choose_target(
             target,
             ghost_positions,
             frightened,
+            heuristic_mode,
         )
         if not result.found:
             continue
@@ -122,7 +133,13 @@ def choose_target(
         # The generator guarantees connectivity, so this is defensive only.
         target = min(targets, key=lambda item: manhattan(start, item))
         return target, plan_route(
-            algorithm, maze, start, target, ghost_positions, frightened
+            algorithm,
+            maze,
+            start,
+            target,
+            ghost_positions,
+            frightened,
+            heuristic_mode,
         )
 
     _, target, result = min(evaluated, key=lambda item: item[0])
@@ -135,8 +152,51 @@ def compare_algorithms(
     goal: Position,
     ghost_positions: Iterable[Position] = (),
     frightened: bool = False,
+    heuristic_mode: HeuristicMode = HeuristicMode.MANHATTAN,
 ) -> list[SearchResult]:
     return compare_searches(
+        make_problem(maze, start, goal, ghost_positions, frightened),
+        heuristic_mode=heuristic_mode,
+    )
+
+
+def compare_heuristics(
+    maze: Maze,
+    start: Position,
+    goal: Position,
+    ghost_positions: Iterable[Position] = (),
+    frightened: bool = False,
+) -> list[SearchResult]:
+    """Compare the three A* heuristic modes on one unchanged snapshot."""
+
+    return compare_a_star_heuristics(
         make_problem(maze, start, goal, ghost_positions, frightened)
     )
 
+
+def auto_select_algorithm(
+    maze: Maze,
+    start: Position,
+    goal: Position,
+    ghost_positions: Iterable[Position] = (),
+    frightened: bool = False,
+) -> tuple[Algorithm, str]:
+    """Choose a search engine through small, explainable rules.
+
+    The selector is intentionally deterministic. It is a controller around the
+    five required algorithms, not a sixth search algorithm.
+    """
+
+    ghosts = tuple(ghost_positions)
+    direct_distance = int(manhattan(start, goal))
+    has_weighted_terrain = any(cost > 1 for cost in maze.terrain_costs.values())
+
+    if ghosts and not frightened:
+        return Algorithm.A_STAR, "moving danger rewards fast risk-aware replanning"
+    if has_weighted_terrain and direct_distance <= 12:
+        return Algorithm.UCS, "a short weighted route benefits from exact cost expansion"
+    if has_weighted_terrain:
+        return Algorithm.DIJKSTRA, "non-negative terrain weights require cost-aware search"
+    if direct_distance <= 10:
+        return Algorithm.BFS, "the nearby target is unweighted, so fewest steps is sufficient"
+    return Algorithm.A_STAR, "the distant target benefits from heuristic guidance"

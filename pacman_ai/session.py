@@ -6,14 +6,31 @@ test in automated environments.
 
 from __future__ import annotations
 
+from datetime import datetime
 import random
 from pathlib import Path
 from time import monotonic
 
 from .algorithms import manhattan
+from .experiments import ExperimentReport, export_csv, export_pdf, run_experiment
 from .maze import Maze, discover_map_files
-from .models import AggregateMetrics, Algorithm, GhostState, Position, SearchResult
-from .planner import choose_target, compare_algorithms, plan_route
+from .models import (
+    AggregateMetrics,
+    Algorithm,
+    GhostBehavior,
+    GhostState,
+    HeuristicMode,
+    Position,
+    SearchResult,
+)
+from .planner import (
+    auto_select_algorithm,
+    choose_target,
+    compare_algorithms,
+    compare_heuristics,
+    plan_route,
+)
+from .replay import ReplayRecorder
 from .settings import POWER_SECONDS, STARTING_LIVES
 
 GHOST_COLORS = (
@@ -23,17 +40,30 @@ GHOST_COLORS = (
     (255, 153, 55),
 )
 GHOST_NAMES = ("Blinky", "Pinky", "Inky", "Clyde")
+GHOST_BEHAVIORS = (
+    GhostBehavior.AGGRESSIVE,
+    GhostBehavior.PREDICTIVE,
+    GhostBehavior.RANDOM,
+    GhostBehavior.DEFENSIVE,
+)
 
 
 class GameSession:
     """Owns one playable Pac-Man pathfinding mission."""
 
     def __init__(self, map_directory: str | Path) -> None:
-        self.map_paths = discover_map_files(map_directory)
+        self.map_directory = Path(map_directory)
+        self.map_paths = discover_map_files(self.map_directory)
         self.map_index = 0
         self.algorithm = Algorithm.A_STAR
+        self.heuristic_mode = HeuristicMode.MANHATTAN
+        self.auto_mode = False
+        self.auto_reason = "Manual algorithm selection is active"
+        self.last_effective_algorithm = self.algorithm
         self.speed = 1
         self.dynamic_ghosts = True
+        self.advanced_ghost_ai = True
+        self.show_heatmap = True
         self._rng = random.Random(9047)
         self.event_serial = 0
         self.last_event = "ready"
@@ -53,6 +83,7 @@ class GameSession:
                 position=position,
                 spawn=position,
                 color=GHOST_COLORS[index % len(GHOST_COLORS)],
+                behavior=GHOST_BEHAVIORS[index % len(GHOST_BEHAVIORS)],
             )
             for index, position in enumerate(self.maze.ghost_starts)
         ]
@@ -66,10 +97,15 @@ class GameSession:
         self.target: Position | None = None
         self.last_result: SearchResult | None = None
         self.comparison_results: list[SearchResult] = []
+        self.heuristic_results: list[SearchResult] = []
+        self.experiment_report: ExperimentReport | None = None
         self.metrics = AggregateMetrics()
         self.frightened_until = 0.0
+        self.replay = ReplayRecorder(self.maze.config.map_id)
+        self.last_export_paths: tuple[Path, ...] = ()
         self.status = "Select an algorithm, then run the AI"
         self._emit("map_loaded")
+        self._capture_replay()
 
     @property
     def ghost_positions(self) -> tuple[Position, ...]:
@@ -93,14 +129,53 @@ class GameSession:
         self.event_serial += 1
 
     def set_algorithm(self, algorithm: Algorithm) -> None:
-        if algorithm == self.algorithm:
+        if algorithm == self.algorithm and not self.auto_mode:
             return
         self.algorithm = algorithm
+        self.auto_mode = False
+        self.last_effective_algorithm = algorithm
+        self.auto_reason = "Manual algorithm selection is active"
         self.route.clear()
         self.target = None
         self.last_result = None
         self.status = f"{algorithm.value} selected"
         self._emit("algorithm_selected")
+
+    def set_heuristic_mode(self, mode: HeuristicMode) -> None:
+        if mode is self.heuristic_mode:
+            return
+        self.heuristic_mode = mode
+        self.route.clear()
+        self.target = None
+        self.last_result = None
+        self.status = f"A* heuristic changed to {mode.value}"
+        self._emit("heuristic_changed")
+
+    def toggle_auto_mode(self) -> None:
+        self.auto_mode = not self.auto_mode
+        self.route.clear()
+        self.target = None
+        self.last_result = None
+        if self.auto_mode:
+            self.status = "Auto-selector enabled: the controller will explain each choice"
+            self.auto_reason = "Waiting for the next target"
+        else:
+            self.status = f"Manual {self.algorithm.value} selection restored"
+            self.last_effective_algorithm = self.algorithm
+            self.auto_reason = "Manual algorithm selection is active"
+        self._emit("auto_mode")
+
+    def toggle_advanced_ghost_ai(self) -> None:
+        self.advanced_ghost_ai = not self.advanced_ghost_ai
+        mode = "advanced team behaviors" if self.advanced_ghost_ai else "classic BFS chase"
+        self.status = f"Ghost intelligence: {mode}"
+        self._emit("ghost_ai")
+
+    def toggle_heatmap(self) -> None:
+        self.show_heatmap = not self.show_heatmap
+        state = "visible" if self.show_heatmap else "hidden"
+        self.status = f"Danger heatmap {state}"
+        self._emit("heatmap")
 
     def set_speed(self, speed: int) -> None:
         if speed not in {1, 2, 4}:
@@ -131,29 +206,93 @@ class GameSession:
 
     def reset(self) -> None:
         algorithm = self.algorithm
+        heuristic_mode = self.heuristic_mode
+        auto_mode = self.auto_mode
         speed = self.speed
         dynamic_ghosts = self.dynamic_ghosts
+        advanced_ghost_ai = self.advanced_ghost_ai
+        show_heatmap = self.show_heatmap
         self.load_map(self.map_index)
         self.algorithm = algorithm
+        self.heuristic_mode = heuristic_mode
+        self.auto_mode = auto_mode
+        self.last_effective_algorithm = algorithm
         self.speed = speed
         self.dynamic_ghosts = dynamic_ghosts
+        self.advanced_ghost_ai = advanced_ghost_ai
+        self.show_heatmap = show_heatmap
         self.status = "Mission reset"
         self._emit("reset")
+        self._capture_replay()
 
     def next_map(self) -> None:
         algorithm = self.algorithm
+        heuristic_mode = self.heuristic_mode
+        auto_mode = self.auto_mode
         speed = self.speed
         dynamic_ghosts = self.dynamic_ghosts
+        advanced_ghost_ai = self.advanced_ghost_ai
+        show_heatmap = self.show_heatmap
         self.load_map(self.map_index + 1)
         self.algorithm = algorithm
+        self.heuristic_mode = heuristic_mode
+        self.auto_mode = auto_mode
+        self.last_effective_algorithm = algorithm
         self.speed = speed
         self.dynamic_ghosts = dynamic_ghosts
+        self.advanced_ghost_ai = advanced_ghost_ai
+        self.show_heatmap = show_heatmap
         self.status = f"Loaded {self.maze.config.name}"
         self._emit("map_changed")
+        self._capture_replay()
+
+    def load_custom_map(self, path: str | Path) -> None:
+        """Refresh map discovery and load a newly validated Map Studio file."""
+
+        target = Path(path).resolve()
+        self.map_paths = discover_map_files(self.map_directory)
+        for index, candidate in enumerate(self.map_paths):
+            if candidate.resolve() == target:
+                preferences = (
+                    self.algorithm,
+                    self.heuristic_mode,
+                    self.auto_mode,
+                    self.speed,
+                    self.dynamic_ghosts,
+                    self.advanced_ghost_ai,
+                    self.show_heatmap,
+                )
+                self.load_map(index)
+                (
+                    self.algorithm,
+                    self.heuristic_mode,
+                    self.auto_mode,
+                    self.speed,
+                    self.dynamic_ghosts,
+                    self.advanced_ghost_ai,
+                    self.show_heatmap,
+                ) = preferences
+                self.last_effective_algorithm = self.algorithm
+                self.status = f"Loaded custom map {self.maze.config.name}"
+                self._emit("custom_map_loaded")
+                self._capture_replay()
+                return
+        raise FileNotFoundError(f"Saved custom map was not discovered: {target}")
 
     def plan_next_route(self) -> SearchResult:
+        effective_algorithm = self.algorithm
+        if self.auto_mode:
+            provisional_target = self.comparison_target()
+            effective_algorithm, self.auto_reason = auto_select_algorithm(
+                self.maze,
+                self.player,
+                provisional_target,
+                self.ghost_positions,
+                self.is_frightened(),
+            )
+        self.last_effective_algorithm = effective_algorithm
         self.target, result = choose_target(
-            self.algorithm,
+            effective_algorithm,
             self.maze,
             self.player,
             self.foods,
@@ -161,13 +300,17 @@ class GameSession:
             self.maze.exit,
             self.ghost_positions,
             self.is_frightened(),
+            self.heuristic_mode,
         )
         self.last_result = result
         self.route = result.path[1:] if result.found else []
         self.metrics.include(result)
         if result.found:
             target_type = "exit" if self.target == self.maze.exit else "food"
-            self.status = f"{self.algorithm.value} planned a route to {target_type}"
+            prefix = "AUTO → " if self.auto_mode else ""
+            self.status = (
+                f"{prefix}{effective_algorithm.value} planned a route to {target_type}"
+            )
             self._emit("planned")
         else:
             self.status = "No route found from the current position"
@@ -185,6 +328,7 @@ class GameSession:
             if not self.route:
                 # The player may already stand on the final exit.
                 self._check_exit()
+                self._capture_replay()
                 return
 
         next_position = self.route[0]
@@ -192,6 +336,7 @@ class GameSession:
             self.route.clear()
             self.status = "Route blocked by a ghost; replanning"
             self._emit("replan")
+            self._capture_replay()
             return
 
         self.route.pop(0)
@@ -210,6 +355,7 @@ class GameSession:
             self.route.clear()
             self.target = None
         self._check_exit()
+        self._capture_replay()
 
     def _collect(self, now: float) -> None:
         if self.player in self.foods:
@@ -236,6 +382,56 @@ class GameSession:
         self.status = "Mission complete: optimized route secured"
         self._emit("win")
 
+    def _nearest_walkable(self, desired: Position) -> Position:
+        """Resolve a projected target that may land inside a wall."""
+
+        return min(
+            self.maze.distances_from(self.player),
+            key=lambda position: (manhattan(position, desired), position[1], position[0]),
+        )
+
+    def _project_player(self, steps: int) -> Position:
+        desired = (
+            self.player[0] + self.player_direction[0] * steps,
+            self.player[1] + self.player_direction[1] * steps,
+        )
+        return self._nearest_walkable(desired)
+
+    def _advanced_ghost_move(
+        self,
+        ghost: GhostState,
+        available: list[Position],
+    ) -> Position:
+        """Select one legal move using the ghost's visible behavior policy."""
+
+        if ghost.behavior is GhostBehavior.RANDOM:
+            return self._rng.choice(sorted(available, key=lambda item: (item[1], item[0])))
+
+        if ghost.behavior is GhostBehavior.DEFENSIVE:
+            distance = manhattan(ghost.position, self.player)
+            if distance <= 5:
+                safest = max(manhattan(position, self.player) for position in available)
+                choices = [
+                    position
+                    for position in available
+                    if manhattan(position, self.player) == safest
+                ]
+                return self._rng.choice(choices)
+            target = self.maze.exit
+        elif ghost.behavior is GhostBehavior.PREDICTIVE:
+            target = self._project_player(4)
+        else:
+            target = self.player
+
+        chase = plan_route(Algorithm.BFS, self.maze, ghost.position, target)
+        preferred = chase.path[1] if len(chase.path) > 1 else ghost.position
+        if preferred in available:
+            return preferred
+        return min(
+            available,
+            key=lambda position: (manhattan(position, target), position[1], position[0]),
+        )
+
     def step_ghosts(self, now: float | None = None) -> None:
         if (
             not self.dynamic_ghosts
@@ -248,9 +444,10 @@ class GameSession:
 
         timestamp = monotonic() if now is None else now
         frightened = self.is_frightened(timestamp)
-        occupied: set[Position] = set()
+        occupied: set[Position] = set(self.ghost_positions)
 
         for ghost in self.ghosts:
+            occupied.discard(ghost.position)
             available = [
                 position
                 for position in self.maze.neighbors(ghost.position)
@@ -268,6 +465,8 @@ class GameSession:
                     if manhattan(position, self.player) == best_distance
                 ]
                 next_position = self._rng.choice(choices)
+            elif self.advanced_ghost_ai:
+                next_position = self._advanced_ghost_move(ghost, available)
             else:
                 chase = plan_route(
                     Algorithm.BFS,
@@ -288,6 +487,7 @@ class GameSession:
             occupied.add(next_position)
 
         self._resolve_collisions(timestamp)
+        self._capture_replay()
 
     def _resolve_collisions(self, now: float) -> None:
         colliding = [ghost for ghost in self.ghosts if ghost.position == self.player]
@@ -341,7 +541,83 @@ class GameSession:
             target,
             self.ghost_positions,
             self.is_frightened(),
+            self.heuristic_mode,
         )
         self.status = "Algorithm comparison ready"
         self._emit("compare")
         return self.comparison_results
+
+    def compare_current_heuristics(self) -> list[SearchResult]:
+        target = self.comparison_target()
+        self.heuristic_results = compare_heuristics(
+            self.maze,
+            self.player,
+            target,
+            self.ghost_positions,
+            self.is_frightened(),
+        )
+        self.status = "A* heuristic comparison ready"
+        self._emit("heuristic_compare")
+        return self.heuristic_results
+
+    def run_research_experiment(self) -> ExperimentReport:
+        self.experiment_report = run_experiment(
+            self.maze,
+            self.player,
+            self.foods | self.power_foods,
+            self.maze.exit,
+            self.ghost_positions,
+            self.is_frightened(),
+            self.heuristic_mode,
+        )
+        self.status = (
+            f"Experiment complete: {len(self.experiment_report.scenarios)} fixed scenarios"
+        )
+        self._emit("experiment")
+        return self.experiment_report
+
+    def _capture_replay(self) -> None:
+        if not hasattr(self, "replay"):
+            return
+        self.replay.capture(
+            player=self.player,
+            ghosts=self.ghost_positions,
+            target=self.target,
+            route=self.route,
+            score=self.score,
+            lives=self.lives,
+            collected=self.collected,
+            event=self.last_event,
+            status=self.status,
+        )
+
+    def save_replay(self, output_directory: str | Path) -> Path:
+        path = self.replay.save(
+            output_directory,
+            algorithm=self.last_effective_algorithm.value,
+            heuristic=self.heuristic_mode.value,
+        )
+        self.last_export_paths = (path,)
+        self.status = f"Replay saved: {path.name}"
+        self._emit("export")
+        return path
+
+    def export_research_bundle(self, output_directory: str | Path) -> tuple[Path, ...]:
+        """Create CSV, PDF, and replay files for the current controlled snapshot."""
+
+        report = self.experiment_report or self.run_research_experiment()
+        destination = Path(output_directory)
+        destination.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_path = export_csv(report, destination / f"experiment_{stamp}.csv")
+        pdf_path = export_pdf(report, destination / f"experiment_{stamp}.pdf")
+        replay_path = self.replay.save(
+            destination,
+            algorithm=self.last_effective_algorithm.value,
+            heuristic=self.heuristic_mode.value,
+            filename=f"replay_{stamp}.json",
+        )
+        self.last_export_paths = (csv_path, pdf_path, replay_path)
+        self.status = "Research bundle exported: CSV, PDF, and replay"
+        self._emit("export")
+        return self.last_export_paths

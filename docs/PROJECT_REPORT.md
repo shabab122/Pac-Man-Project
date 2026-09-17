@@ -2,103 +2,100 @@
 
 ## Project title
 
-**Optimized Pac-Man Pathfinding Using Artificial Intelligence**
+**Adaptive and Explainable Pac-Man Pathfinding Using Classical AI Search**
 
-Course context: Artificial Intelligence Lab, United International University  
-Team: Group 7
+Course context: Artificial Intelligence Laboratory
 
 ## 1. Problem statement
 
-Traditional Pac-Man movement controlled by fixed directions or uninformed manual
-choices can take unnecessarily long routes, move toward hazards, and explore the
-maze inefficiently. A route that has the fewest cells is also not always the
-safest route when terrain and nearby ghosts carry different costs.
+A shortest route by cell count is not always the safest or cheapest route when
+terrain and nearby ghosts have different costs. A game demonstration also needs
+to show *why* a route was selected and compare algorithms fairly.
 
-The project therefore asks:
+The project asks:
 
-> How can classical AI search algorithms guide Pac-Man to collect all food and
-> reach the exit while exposing the trade-off between route length, risk, search
-> effort, and planning time?
+> How can classical AI search guide Pac-Man through a changing weighted maze
+> while making route quality, search effort, heuristic behavior, and decisions
+> visible and reproducible?
 
-The main technical problems are:
+The technical problems are:
 
-- representing the maze as a graph;
-- finding a route around walls;
-- handling weighted terrain and ghost danger;
-- comparing algorithms on the same input;
-- responding when moving ghosts make an earlier route unsafe;
-- presenting search behavior clearly enough for an AI Lab demonstration.
+- represent a maze as a graph;
+- find valid routes around walls;
+- model terrain and ghost danger;
+- compare algorithms on identical input;
+- react when moving ghosts invalidate a route;
+- explain algorithm choices and guarantees;
+- create and validate custom maps safely;
+- produce evidence that can be inspected after the demo.
 
 ## 2. Proposed solution
 
-The solution is a Python desktop simulation built with Pygame Community Edition.
-Every walkable maze cell becomes a graph node. Legal up, down, left, and right
-moves become graph edges.
+The solution is a Python desktop game built with Pygame Community Edition.
+Every walkable cell is a graph node and each legal four-direction move is an
+edge. Pac-Man selects a pellet or exit, plans a route, displays explored nodes
+and metrics, moves one cell, and replans when required.
 
-Pac-Man automatically selects a nearby remaining pellet, runs the selected search
-algorithm, visualizes explored nodes and the returned path, and moves through the
-route. When no pellet remains, the planner targets the exit. Moving ghosts create
-a soft danger cost around their current locations. A blocked next step triggers
-replanning from the new game state.
+The game includes manual BFS, DFS, UCS, Dijkstra, and A*. An optional
+explainable AUTO controller chooses among those five using deterministic rules.
+AUTO does not replace or modify the required algorithms.
 
-The interface also provides a comparison mode. It freezes one logical snapshot
-and runs BFS, DFS, UCS, Dijkstra, and A* from the same start cell to the same goal.
+The AI Workbench adds:
+
+- Manhattan, Euclidean, and Weighted A*;
+- Aggressive, Predictive, Random, and Defensive ghost policies;
+- fixed-snapshot comparison and multi-scenario experiments;
+- a route explanation panel;
+- logical replay and JSON saving;
+- CSV and PDF reports;
+- a visual Map Studio that creates new validated maps.
 
 ## 3. Objectives
 
-- Implement five classical search algorithms without a pathfinding library.
-- Make every search result reconstructable and visually inspectable.
-- Compare step count, weighted cost, expanded nodes, frontier size, and runtime.
-- Demonstrate the difference between unweighted and weighted planning.
-- Keep maps deterministic so a classroom result can be repeated.
-- Provide a complete game loop with lives, score, food, ghosts, power mode, and exit.
-- Make the project easy to install, test, explain, and extend.
+- Preserve five independent, inspectable classical-search implementations.
+- Demonstrate unweighted versus weighted planning.
+- Compare steps, cost, expanded nodes, frontier peak, and time fairly.
+- Show the role and limitation of A* heuristics.
+- Make dynamic replanning and ghost behavior observable.
+- Provide reproducible experiments rather than unsupported performance claims.
+- Keep setup local and beginner-friendly.
+- Validate maps, exports, and game behavior automatically.
 
 ## 4. Key features
 
-### AI and visualization
+### Search and explainability
 
-- BFS, DFS, UCS, Dijkstra, and A* selection
-- Animated explored-node overlay
-- Current path and target marker
-- Automatic food target selection
-- Dynamic route replanning
-- Same-snapshot algorithm comparison
+- BFS, DFS, UCS, Dijkstra, and A*
+- Manual and explainable AUTO selection
+- Manhattan, Euclidean, and Weighted A*
+- Explored-order animation and route overlay
+- Per-route explanation of structure, priority, guarantee, and evidence
+- Same-snapshot algorithm and heuristic comparisons
 
-### Game system
+### Established game system
 
-- Three generated but deterministic mazes
-- Normal and power pellets
-- Three lives and score system
-- Moving BFS-controlled ghosts
-- Temporary frightened-ghost mode
-- Locked exit that opens after collection
-- Adjustable simulation speed
+- Three deterministic neon mazes
+- Pellets, power pellets, score, lives, and locked exit
+- Weighted terrain
+- Four transparent advanced ghost policies
+- Classic BFS ghost mode
+- Ghost risk heatmap
+- Dynamic replanning
+- Speed, pause, step, reset, map, and freeze controls
 
-### Reliability and usability
+### Research and creation tools
 
-- Validated JSON map definitions
-- Graceful fallback when an audio device is unavailable
-- Headless smoke-test and screenshot modes
-- Standard-library and pytest-compatible automated tests
-- Windows, macOS, and Linux instructions
+- Five-target controlled experiment
+- Three timing samples per algorithm/target
+- CSV raw-data export
+- PDF summary report
+- Bounded mission replay and JSON export
+- Safe custom Map Studio
+- Headless smoke test and visual QA gallery
 
-## 5. Algorithm and approach
+## 5. State and cost model
 
-### State representation
-
-A state is a coordinate `(x, y)`, where `x` is the column and `y` is the row.
-Walls are excluded. A state can have up to four neighbors.
-
-### Goal test
-
-For one search segment, the test is:
-
-```text
-current_position == target_position
-```
-
-### Cost model
+A state is `(x, y)`. Walls are excluded. A state has at most four neighbors.
 
 For weighted algorithms:
 
@@ -106,98 +103,151 @@ For weighted algorithms:
 step_cost = terrain_cost(destination) + ghost_danger(destination)
 ```
 
-Terrain costs are 1, 2, or 3. Ghost danger adds:
+Terrain cost is 1, 2, or 3. Ghost danger is:
 
-| Manhattan distance from a ghost | Added danger cost |
+| Manhattan distance | Added cost |
 |---:|---:|
-| 0 cells | 40 |
-| 1 cell | 12 |
-| 2 cells | 5 |
-| 3 cells | 2 |
-| 4 or more cells | 0 |
+| 0 | 40 |
+| 1 | 12 |
+| 2 | 5 |
+| 3 | 2 |
+| 4+ | 0 |
 
-BFS and DFS ignore these weights while choosing a path, but the system calculates
-the actual weighted cost afterward for comparison.
+BFS and DFS do not use weights for path selection. They still report the actual
+weighted cost of the returned path.
 
-### A* heuristic
+## 6. Algorithms
+
+| Algorithm | Data structure | Uses weights | Guarantee in this finite grid |
+|---|---|---:|---|
+| BFS | FIFO queue | No | Fewest steps |
+| DFS | LIFO stack | No | Finds a route, not necessarily optimal |
+| UCS | Min-priority queue | Yes | Lowest weighted cost |
+| Dijkstra | Priority queue + settled set | Yes | Lowest weighted cost |
+| A* | Priority queue | Yes | Depends on heuristic mode |
+
+### A* modes
 
 ```text
-h(n) = |x_current - x_goal| + |y_current - y_goal|
-f(n) = g(n) + h(n)
+f(n) = g(n) + w × h(n)
 ```
 
-The heuristic is Manhattan distance. It never overestimates the remaining cost
-because movement uses four directions and every step costs at least 1. Therefore,
-A* returns an optimal weighted path under the current static snapshot.
+- Manhattan: `h(n)=|dx|+|dy|`, `w=1`; admissible and consistent.
+- Euclidean: `h(n)=sqrt(dx²+dy²)`, `w=1`; admissible but weaker here.
+- Weighted A*: Manhattan with `w=1.65`; stronger goal bias, no optimality
+  guarantee.
 
-### Dynamic behavior
+### UCS and Dijkstra
 
-Search algorithms plan against a snapshot. Ghosts can move after that search.
-Before Pac-Man takes the next step, the controller checks whether a non-frightened
-ghost now occupies that cell. If so, it discards the old route and searches again.
+With one source, one goal, non-negative costs, and early termination, both
+normally expand using the same accumulated-cost priority and return the same
+answer. They remain separate functions for teaching and code comparison.
 
-See `ALGORITHMS.md` for pseudocode, properties, and complexity.
+## 7. Dynamic behavior
 
-## 6. Programming language and technologies
+Search runs on a snapshot. A ghost may move afterward. Before Pac-Man enters the
+next route cell, the controller checks whether that cell now contains an active
+ghost. If blocked, the old route is discarded and a new search begins.
+
+Advanced ghost policies are:
+
+- Aggressive: BFS toward the current player cell.
+- Predictive: aims four cells ahead of the player direction.
+- Random: selects a deterministic-seeded legal random move.
+- Defensive: retreats when Pac-Man is close and guards the exit when distant.
+
+Power mode temporarily changes every active ghost policy to flee behavior.
+
+## 8. AUTO selection
+
+AUTO uses simple visible rules:
+
+- active ghost danger → A*;
+- short weighted target → UCS;
+- other weighted target → Dijkstra;
+- nearby unweighted target → BFS;
+- distant unweighted target → A*.
+
+The selected algorithm and reason are displayed. DFS remains available manually
+but is not selected automatically because it has no route-quality guarantee.
+
+## 9. Map Studio safety
+
+Map Studio clones the active maze. A user can edit floor, walls, start, exit,
+pellets, power pellets, ghosts, and cost-2/cost-3 terrain.
+
+Before saving, the editor verifies:
+
+- closed outer wall;
+- distinct valid start and exit;
+- at least one pellet and ghost;
+- every entity reachable from the start;
+- no conflicting pellet types;
+- valid weighted terrain.
+
+Saving creates a timestamped `explicit-v1` file under `maps/custom/`. The
+packaged source map is not modified.
+
+## 10. Experiment design
+
+The experiment selects up to five deterministic targets distributed from near
+to far, including the exit. Each algorithm receives the same start, target,
+terrain, ghost positions, risk cost, and power state.
+
+Recorded metrics:
+
+- route found;
+- route steps;
+- weighted route cost;
+- expanded nodes;
+- peak frontier;
+- average planning milliseconds.
+
+Timing is averaged over three runs but remains hardware-dependent. Conclusions
+should prioritize deterministic path and search-work metrics.
+
+## 11. Technology
 
 | Technology | Purpose |
 |---|---|
-| Python 3.10+ | Algorithms, data model, game logic, and entry point |
-| Pygame Community Edition 2.5.6 | Window, graphics, input, timing, and optional audio |
-| JSON | Small, readable map configuration files |
-| `dataclasses`, `enum`, `heapq`, `deque` | Typed state, algorithms, queues, and priority queues |
-| `unittest` | Dependency-free automated verification |
-| pytest 8.4.2 | Optional developer-friendly test execution |
-| Git and GitHub | Recommended version control and collaboration |
+| Python 3.10+ | Algorithms, game rules, editor, replay, experiments |
+| pygame-ce 2.5.6 | Graphics, input, timing, procedural audio |
+| ReportLab 4.4.9 | PDF experiment report |
+| JSON/CSV | Maps, replay, raw evidence |
+| `deque`, `heapq`, `dataclasses`, `enum` | Core implementation |
+| unittest / pytest | Regression, feature, and integration tests |
 
-No AI API, database, network service, or pre-trained model is needed.
+There is no API, database, cloud service, or pre-trained model.
 
-## 7. System workflow
+## 12. Validation
 
-1. Load and validate a deterministic maze.
-2. Select one of five algorithms.
-3. Select a nearby remaining food target, or the exit when food is finished.
-4. Build a search problem from the maze, target, terrain, and ghost positions.
-5. Run the algorithm and reconstruct its path.
-6. Visualize explored states and route metrics.
-7. Move Pac-Man and update pellets, score, power mode, ghosts, and collisions.
-8. Replan when the route finishes or becomes blocked.
-9. Unlock and enter the exit to complete the mission.
+The test suite checks:
 
-## 8. Expected results
-
-- BFS should return the fewest-step path on an unweighted grid.
-- DFS should find a path but may produce a long, non-optimal route.
-- UCS and Dijkstra should return the same minimum-cost result in this problem.
-- A* should return the same optimal cost while often expanding fewer cells toward
-  one target because Manhattan distance directs the search.
-- Weighted algorithms may choose more steps when that route has lower terrain or
-  ghost-danger cost.
-
-These are expected algorithm properties, not fixed numeric results. Exact metrics
-depend on the current map, start, target, and ghost positions.
-
-## 9. Validation
-
-The included automated suite covers:
-
-- path validity for all five algorithms;
+- valid routes for all five algorithms;
 - BFS shortest-step behavior;
-- weighted optimality for UCS, Dijkstra, and A*;
-- safe failure when no route exists;
-- map connectivity and determinism;
-- complete five-algorithm comparison output;
-- controller reset behavior;
-- completion of a full static A* mission.
+- weighted optimality of UCS, Dijkstra, and default Manhattan A*;
+- unreachable-goal safety;
+- deterministic connected packaged maps;
+- complete static missions;
+- reset and compatibility behavior;
+- all A* modes;
+- deterministic AUTO selection;
+- legal advanced ghost movement;
+- explicit-map round-trip;
+- non-mutating Map Studio save;
+- experiment coverage and CSV/PDF generation;
+- replay capture and JSON export.
 
-Run `python run_tests.py` from the project folder.
+Use `python run_tests.py`, `python main.py --smoke-test`, and
+`python main.py --qa-gallery qa_gallery`.
 
-## 10. Limitations and future work
+## 13. Limitations
 
-- Ghost behavior uses deterministic graph search, not reinforcement learning.
-- The target selector evaluates a shortlist of nearby food items instead of
-  solving the globally optimal travelling-salesperson route.
-- Search comparisons use small maps, so runtime differences can be noisy.
-- Future versions could add user-created maps, replay export, multi-agent search,
-  minimax ghosts, or reinforcement-learning baselines.
+- This is classical symbolic search, not machine learning.
+- AUTO uses transparent rules rather than a learned policy.
+- Weighted A* may return a non-optimal route.
+- Small-map timing is noisy.
+- Target selection optimizes one segment at a time, not the globally shortest
+  complete pellet tour.
+- Replays store logical state rather than video.
 

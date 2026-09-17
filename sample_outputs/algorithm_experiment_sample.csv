@@ -1,0 +1,45 @@
+Adaptive Pac-Man AI Experiment
+Map,Cyber Citadel
+Created (UTC),2026-09-17T13:54:59.507991+00:00
+
+category,scenario,label,algorithm,heuristic,found,steps,path_cost,expanded_nodes,frontier_peak,elapsed_ms
+algorithm,Target 1,BFS,BFS,,True,1,1.000,3,2,0.011433
+algorithm,Target 1,DFS,DFS,,True,1,1.000,295,37,0.380149
+algorithm,Target 1,UCS,UCS,,True,1,1.000,3,2,0.012932
+algorithm,Target 1,Dijkstra,Dijkstra,,True,1,1.000,3,2,0.009418
+algorithm,Target 1,A*,A*,Manhattan,True,1,1.000,2,2,0.007838
+algorithm,Target 2,BFS,BFS,,True,59,93.000,291,14,0.427660
+algorithm,Target 2,DFS,DFS,,True,111,197.000,177,37,0.456385
+algorithm,Target 2,UCS,UCS,,True,59,90.000,291,14,1.126419
+algorithm,Target 2,Dijkstra,Dijkstra,,True,59,90.000,291,14,0.828106
+algorithm,Target 2,A*,A*,Manhattan,True,59,90.000,287,20,1.215211
+algorithm,Target 3,BFS,BFS,,True,60,104.000,294,14,0.453211
+algorithm,Target 3,DFS,DFS,,True,96,133.000,181,37,0.326510
+algorithm,Target 3,UCS,UCS,,True,60,92.000,292,14,1.057391
+algorithm,Target 3,Dijkstra,Dijkstra,,True,60,92.000,292,14,0.836963
+algorithm,Target 3,A*,A*,Manhattan,True,60,92.000,290,19,1.155213
+algorithm,Target 4,BFS,BFS,,True,43,46.000,182,14,0.257551
+algorithm,Target 4,DFS,DFS,,True,69,73.000,129,28,0.216971
+algorithm,Target 4,UCS,UCS,,True,43,44.000,178,14,0.714999
+algorithm,Target 4,Dijkstra,Dijkstra,,True,43,44.000,178,14,0.548774
+algorithm,Target 4,A*,A*,Manhattan,True,43,44.000,82,21,0.370059
+algorithm,Target 5,BFS,BFS,,True,46,47.000,209,14,0.400812
+algorithm,Target 5,DFS,DFS,,True,46,47.000,47,12,0.096747
+algorithm,Target 5,UCS,UCS,,True,46,47.000,206,14,0.811002
+algorithm,Target 5,Dijkstra,Dijkstra,,True,46,47.000,206,14,0.585340
+algorithm,Target 5,A*,A*,Manhattan,True,46,47.000,95,11,0.373672
+heuristic,Target 1,Manhattan,A*,Manhattan,True,1,1.000,2,2,0.005960
+heuristic,Target 1,Euclidean,A*,Euclidean,True,1,1.000,2,2,0.010124
+heuristic,Target 1,Weighted A*,A*,Weighted A*,True,1,1.000,2,2,0.005504
+heuristic,Target 2,Manhattan,A*,Manhattan,True,59,90.000,287,20,1.077647
+heuristic,Target 2,Euclidean,A*,Euclidean,True,59,90.000,287,21,1.168502
+heuristic,Target 2,Weighted A*,A*,Weighted A*,True,59,90.000,263,19,1.117672
+heuristic,Target 3,Manhattan,A*,Manhattan,True,60,92.000,290,19,1.202857
+heuristic,Target 3,Euclidean,A*,Euclidean,True,60,92.000,291,23,1.133518
+heuristic,Target 3,Weighted A*,A*,Weighted A*,True,60,92.000,278,24,1.135155
+heuristic,Target 4,Manhattan,A*,Manhattan,True,43,44.000,82,21,0.353133
+heuristic,Target 4,Euclidean,A*,Euclidean,True,43,44.000,94,21,0.391632
+heuristic,Target 4,Weighted A*,A*,Weighted A*,True,43,44.000,60,17,0.258847
+heuristic,Target 5,Manhattan,A*,Manhattan,True,46,47.000,95,11,0.370810
+heuristic,Target 5,Euclidean,A*,Euclidean,True,46,47.000,113,15,0.441253
+heuristic,Target 5,Weighted A*,A*,Weighted A*,True,46,47.000,60,10,0.243584

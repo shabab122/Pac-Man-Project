@@ -1,0 +1,558 @@
+{
+  "format": "pacman-ai-replay-v1",
+  "created_at": "2026-09-17T13:54:59.581424+00:00",
+  "map_id": "cyber_citadel",
+  "algorithm": "A*",
+  "heuristic": "Manhattan",
+  "frame_count": 13,
+  "frames": [
+    {
+      "tick": 0,
+      "player": [
+        1,
+        1
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": null,
+      "route": [],
+      "score": 0,
+      "lives": 3,
+      "collected": 0,
+      "event": "map_loaded",
+      "status": "Select an algorithm, then run the AI"
+    },
+    {
+      "tick": 1,
+      "player": [
+        1,
+        2
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": null,
+      "route": [],
+      "score": 10,
+      "lives": 3,
+      "collected": 1,
+      "event": "collect",
+      "status": "Data pellet collected"
+    },
+    {
+      "tick": 2,
+      "player": [
+        1,
+        3
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        2,
+        3
+      ],
+      "route": [
+        [
+          2,
+          3
+        ]
+      ],
+      "score": 10,
+      "lives": 3,
+      "collected": 1,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 3,
+      "player": [
+        2,
+        3
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": null,
+      "route": [],
+      "score": 20,
+      "lives": 3,
+      "collected": 2,
+      "event": "collect",
+      "status": "Data pellet collected"
+    },
+    {
+      "tick": 4,
+      "player": [
+        3,
+        3
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        4,
+        5
+      ],
+      "route": [
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          5
+        ],
+        [
+          4,
+          5
+        ]
+      ],
+      "score": 20,
+      "lives": 3,
+      "collected": 2,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 5,
+      "player": [
+        3,
+        4
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        4,
+        5
+      ],
+      "route": [
+        [
+          3,
+          5
+        ],
+        [
+          4,
+          5
+        ]
+      ],
+      "score": 20,
+      "lives": 3,
+      "collected": 2,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 6,
+      "player": [
+        3,
+        5
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        4,
+        5
+      ],
+      "route": [
+        [
+          4,
+          5
+        ]
+      ],
+      "score": 20,
+      "lives": 3,
+      "collected": 2,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 7,
+      "player": [
+        4,
+        5
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": null,
+      "route": [],
+      "score": 30,
+      "lives": 3,
+      "collected": 3,
+      "event": "collect",
+      "status": "Data pellet collected"
+    },
+    {
+      "tick": 8,
+      "player": [
+        3,
+        5
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        3,
+        1
+      ],
+      "route": [
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "score": 30,
+      "lives": 3,
+      "collected": 3,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 9,
+      "player": [
+        3,
+        4
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        3,
+        1
+      ],
+      "route": [
+        [
+          3,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "score": 30,
+      "lives": 3,
+      "collected": 3,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 10,
+      "player": [
+        3,
+        3
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        3,
+        1
+      ],
+      "route": [
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "score": 30,
+      "lives": 3,
+      "collected": 3,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 11,
+      "player": [
+        2,
+        3
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        3,
+        1
+      ],
+      "route": [
+        [
+          1,
+          3
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "score": 30,
+      "lives": 3,
+      "collected": 3,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    },
+    {
+      "tick": 12,
+      "player": [
+        1,
+        3
+      ],
+      "ghosts": [
+        [
+          22,
+          4
+        ],
+        [
+          15,
+          1
+        ],
+        [
+          23,
+          7
+        ]
+      ],
+      "target": [
+        3,
+        1
+      ],
+      "route": [
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "score": 30,
+      "lives": 3,
+      "collected": 3,
+      "event": "planned",
+      "status": "A* planned a route to food"
+    }
+  ]
+}

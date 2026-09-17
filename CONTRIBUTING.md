@@ -8,5 +8,9 @@
 6. Ask at least one teammate to review algorithm or game-rule changes.
 7. Merge only when tests pass and the owner of the affected module approves.
 
-Do not commit `.venv`, cache directories, IDE settings, or generated build files.
+When adding an upgraded feature, also add a focused test in
+`tests/test_upgrades.py`, update the relevant user guide, and confirm the
+feature is reachable from either Play Control or AI Workbench. Search logic
+must remain independent from Pygame so it can be tested headlessly.
 
+Do not commit `.venv`, cache directories, IDE settings, or generated build files.
